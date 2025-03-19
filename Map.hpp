@@ -1,11 +1,11 @@
 #pragma once
 
 #include <string>
+#include "ECS/ECS.hpp"
 
 class Map {
     public:
-
-        Map(std::string tID, int ms, int ts);
+        Map(std::string tID, int ms, int ts, Manager& man);
         ~Map();
 
         void LoadMap(std::string path, int sizeX, int sizeY);
@@ -16,5 +16,5 @@ class Map {
         int mapScale;
         int tileSize;
         int scaledSize;
-
+        Manager& manager;
 };

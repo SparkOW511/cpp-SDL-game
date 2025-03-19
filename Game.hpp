@@ -1,4 +1,3 @@
-
 #ifndef Game_hpp
 #define Game_hpp
 
@@ -6,9 +5,11 @@
 #include "SDL2/SDL_image.h"
 #include <iostream>
 #include <vector>
+#include "ECS/ECS.hpp"
 
 class ColliderComponent;
 class AssetManager;
+class Map;
 
 class Game {
 
@@ -43,5 +44,12 @@ class Game {
         int count = 0;
         Uint32 lastTime = 0;
         SDL_Window* window;
+        Map* map;
+        Manager manager;
+        Entity& player;
+        Entity& enemy;
+        Entity& healthbar;
+        Entity& gameover;
+        SDL_Color white = {255, 255, 255, 255};
 };
 #endif

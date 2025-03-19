@@ -11,6 +11,12 @@ class Component;
 class Entity;
 class Manager;
 
+class System {
+    public:
+        virtual void update() = 0;
+        virtual ~System() = default;
+};
+
 using ComponentID = std::size_t;
 using Group = std::size_t;
 
@@ -101,10 +107,22 @@ class Manager {
     private:
         std::vector<std::unique_ptr<Entity>> entities;
         std::array<std::vector<Entity*>, maxGroups> groupedEntities;
+        std::vector<std::unique_ptr<System>> systems;
+
     public:
         void update() {
+            for(auto& s : systems) s->update();
             for(auto& e : entities) e->update();
         }
+
+        template<typename T, typename... TArgs>
+        T& addSystem(TArgs&&... args) {
+            T* s(new T(std::forward<TArgs>(args)...));
+            std::unique_ptr<System> uPtr{ s };
+            systems.emplace_back(std::move(uPtr));
+            return *s;
+        }
+
         void draw() {
             for(auto& e : entities) e->draw();
         }
