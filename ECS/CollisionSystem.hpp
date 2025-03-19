@@ -7,6 +7,8 @@
 class CollisionSystem : public System {
     private:
         Manager& manager;
+        float damageTimer = 1.0f; // Start with cooldown active
+        const float damageCooldown = 0.3f; // 300ms cooldown
     
     public:
         CollisionSystem(Manager& mManager) : manager(mManager) {}
@@ -19,6 +21,8 @@ class CollisionSystem : public System {
             auto& objects = manager.getGroup(Game::groupObjects);
 
             if (players.empty()) return;
+
+            damageTimer -= 1.0f/60.0f; 
 
             auto& player = players[0];
             SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
@@ -54,9 +58,10 @@ class CollisionSystem : public System {
                     }
                 }
 
-                // Player collision
-                if(Collision::AABB(playerCol, e->getComponent<ColliderComponent>().collider)) {
+                // Player collision with damage cooldown
+                if(Collision::AABB(playerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
                     player->getComponent<HealthComponent>().takeDamage(5);
+                    damageTimer = damageCooldown;
                 }
 
                 // Destroy dead enemies

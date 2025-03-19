@@ -113,49 +113,6 @@ void Game::update() {
     manager.refresh();
     manager.update();
 
-    // Handle collisions
-    SDL_Rect playerCol = player.getComponent<ColliderComponent>().collider;
-    Vector2D playerPos = player.getComponent<TransformComponent>().position;
-
-    // Player collision with terrain
-    for(auto& c : manager.getGroup(groupColliders)) {
-        SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
-        if(Collision::AABB(cCol, playerCol)) {
-            player.getComponent<TransformComponent>().position = playerPos;
-        }
-    }
-
-    // Player collision with objects (clues)
-    for(auto& o : manager.getGroup(groupObjects)) {
-        if(Collision::AABB(player.getComponent<ColliderComponent>().collider, 
-                          o->getComponent<ColliderComponent>().collider)) {
-            std::cout << "Clue picked up" << std::endl;
-            player.getComponent<HealthComponent>().heal(20);
-            o->destroy();
-        }
-    }
-
-    // Enemy collision with projectiles and player
-    for(auto& e : manager.getGroup(groupEnemies)) {
-        // Projectile collision
-        for(auto& p : manager.getGroup(groupProjectiles)) {
-            if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
-                              p->getComponent<ColliderComponent>().collider)) {
-                std::cout << "Hit enemy" << std::endl;
-                e->getComponent<HealthComponent>().takeDamage(25);
-                p->destroy();
-            }
-        }
-
-        if(Collision::AABB(playerCol, e->getComponent<ColliderComponent>().collider)) {
-            player.getComponent<HealthComponent>().takeDamage(5);
-        }
-
-        if(e->getComponent<HealthComponent>().health <= 0) {
-            e->destroy();
-        }
-    }
-
     camera.x = player.getComponent<TransformComponent>().position.x - 400;
     camera.y = player.getComponent<TransformComponent>().position.y - 320;
 
