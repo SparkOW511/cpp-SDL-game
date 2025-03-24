@@ -9,6 +9,8 @@ class CollisionSystem : public System {
         Manager& manager;
         float damageTimer = 1.0f; // Start with cooldown active
         const float damageCooldown = 0.3f; // 300ms cooldown
+        float objectCollisionDelay = 1.0f; // Delay before object collisions are active (1 second)
+        bool objectCollisionsEnabled = false;
     
     public:
         CollisionSystem(Manager& mManager) : manager(mManager) {}
@@ -22,7 +24,15 @@ class CollisionSystem : public System {
 
             if (players.empty()) return;
 
-            damageTimer -= 1.0f/60.0f; 
+            // Update timers
+            damageTimer -= 1.0f/60.0f;
+            
+            if (!objectCollisionsEnabled) {
+                objectCollisionDelay -= 1.0f/60.0f;
+                if (objectCollisionDelay <= 0.0f) {
+                    objectCollisionsEnabled = true;
+                }
+            }
 
             auto& player = players[0];
             SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
@@ -36,13 +46,15 @@ class CollisionSystem : public System {
                 }
             }
 
-            // Player collision with objects (clues)
-            for(auto& o : objects) {
-                if(Collision::AABB(player->getComponent<ColliderComponent>().collider, 
-                                  o->getComponent<ColliderComponent>().collider)) {
-                    std::cout << "Clue picked up" << std::endl;
-                    player->getComponent<HealthComponent>().heal(20);
-                    o->destroy();
+            // Player collision with objects (clues) - only if enabled
+            if (objectCollisionsEnabled) {
+                for(auto& o : objects) {
+                    if(Collision::AABB(player->getComponent<ColliderComponent>().collider, 
+                                      o->getComponent<ColliderComponent>().collider)) {
+                        std::cout << "Clue picked up" << std::endl;
+                        player->getComponent<HealthComponent>().heal(20);
+                        o->destroy();
+                    }
                 }
             }
 

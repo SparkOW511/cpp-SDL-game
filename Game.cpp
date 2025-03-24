@@ -11,7 +11,7 @@
 
 SDL_Renderer *Game::renderer = nullptr;
 SDL_Event Game::event;
-SDL_Rect Game::camera = {0, 0, 800, 640};
+SDL_Rect Game::camera = {0, 0, 1920, 1080};
 bool Game::isRunning = false;
 AssetManager* Game::assets = nullptr;
 
@@ -50,7 +50,7 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         std::cout << "Error initializing SDL_ttf" << std::endl;
     }
 
-    assets->AddTexture("terrain", "./assets/terain_textures.png");
+    assets->AddTexture("terrain", "./assets/TerrainTexturesLevel1.png");
     assets->AddTexture("player", "./assets/playeranimations.png");
     assets->AddTexture("enemy", "./assets/enemyanimations.png");
     assets->AddTexture("clue", "./assets/clue.png");
@@ -62,7 +62,7 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
 
     map = new Map("terrain", 2, 32, manager);
 
-    map->LoadMap("./assets/map0.map", 25, 20);
+    map->LoadMap("./assets/Level1Map.txt", 60, 34);
 
     player.addComponent<TransformComponent>(3);
     player.addComponent<SpriteComponent>("player", true);
@@ -113,14 +113,19 @@ void Game::update() {
     manager.refresh();
     manager.update();
 
-    camera.x = player.getComponent<TransformComponent>().position.x - 400;
-    camera.y = player.getComponent<TransformComponent>().position.y - 320;
+    // Center camera on player
+    camera.x = player.getComponent<TransformComponent>().position.x - (camera.w / 2);
+    camera.y = player.getComponent<TransformComponent>().position.y - (camera.h / 2);
+
+    // Get world bounds (60x34 tiles * 32 pixels * 2 scale)
+    int worldWidth = 60 * 32 * 2;
+    int worldHeight = 34 * 32 * 2;
 
     // Camera bounds checking
     if(camera.x < 0) camera.x = 0;
     if(camera.y < 0) camera.y = 0;
-    if(camera.x > camera.w) camera.x = camera.w;
-    if(camera.y > camera.h) camera.y = camera.h;
+    if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
+    if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
     
     if(player.getComponent<HealthComponent>().health <= 0) {
         gameover.getComponent<UILabel>().SetLabelText("Game Over", "font2");

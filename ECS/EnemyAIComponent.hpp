@@ -10,7 +10,7 @@ class EnemyAIComponent : public Component {
         TransformComponent* transform;
         SpriteComponent* sprite;
         float chaseRange = 200.0f;
-        float moveSpeed = 1.5f;
+        float moveSpeed = 2.0f;
 
         EnemyAIComponent(Manager& mManager) : manager(mManager) {}
 
