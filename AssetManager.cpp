@@ -17,7 +17,7 @@ void AssetManager::CreateProjectile(Vector2D pos, Vector2D vel, int range, int s
 
 void AssetManager::CreateObject(int posX, int posY, std::string id) {
     auto& obj(manager->addEntity());
-    obj.addComponent<TransformComponent>(posX, posY, 32, 32, 1);
+    obj.addComponent<TransformComponent>(posX, posY, 32, 32, 2);
     obj.addComponent<SpriteComponent>(id, true);
     obj.addComponent<ColliderComponent>("object");
     obj.addGroup(Game::groupObjects);

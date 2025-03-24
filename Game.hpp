@@ -44,12 +44,6 @@ class Game {
         int count = 0;
         Uint32 lastTime = 0;
         SDL_Window* window;
-        Map* map;
-        Manager manager;
-        Entity& player;
-        Entity& enemy;
-        Entity& healthbar;
-        Entity& gameover;
         SDL_Color white = {255, 255, 255, 255};
 };
 #endif

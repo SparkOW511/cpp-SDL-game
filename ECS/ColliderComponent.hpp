@@ -33,6 +33,14 @@ class ColliderComponent : public Component {
             entity->addComponent<TransformComponent>();
         }
         transform = &entity->getComponent<TransformComponent>();
+        
+        // If this is a player or entity collider, initialize based on transform
+        if(tag != "terrain") {
+            collider.x = static_cast<int>(transform->position.x);
+            collider.y = static_cast<int>(transform->position.y);
+            collider.w = transform->width * transform->scale;
+            collider.h = transform->height * transform->scale;
+        }
 
         tex = TextureManager::LoadTexture("assets/colliderTex.png");
         srcR = { 0, 0, 32, 32};
@@ -40,18 +48,22 @@ class ColliderComponent : public Component {
     }
 
     void update() override {
-        if(tag !="terrain") {
+        if(tag != "terrain") {
             collider.x = static_cast<int>(transform->position.x);
             collider.y = static_cast<int>(transform->position.y);
             collider.w = transform->width * transform->scale;
             collider.h = transform->height * transform->scale;
         }
-            destR.x = collider.x - Game::camera.x;
-            destR.y = collider.y - Game::camera.y;
+        
+        // Update destination rectangle for drawing, accounting for camera
+        destR.x = collider.x - Game::camera.x;
+        destR.y = collider.y - Game::camera.y;
+        destR.w = collider.w;
+        destR.h = collider.h;
     }
 
     void draw() override {
-       // TextureManager::Draw(tex, srcR, destR, SDL_FLIP_NONE);
+        // Make colliders visible for debugging
+        TextureManager::Draw(tex, srcR, destR, SDL_FLIP_NONE);
     }
-
 };
