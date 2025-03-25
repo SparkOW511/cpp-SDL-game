@@ -16,6 +16,7 @@ Manager manager;
 auto& player(manager.addEntity());
 auto& enemy(manager.addEntity());
 auto& healthbar(manager.addEntity());
+auto& ammobar(manager.addEntity());
 auto& gameover(manager.addEntity());
 
 // Global entity groups
@@ -74,11 +75,12 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddTexture("player", "./assets/playeranimations.png");
     assets->AddTexture("enemy", "./assets/enemyanimations.png");
     assets->AddTexture("clue", "./assets/clue.png");
+    assets->AddTexture("magazine", "./assets/magazine.png");
     assets->AddTexture("bulletHorizontal", "./assets/bulletHorizontal.png");
     assets->AddTexture("bulletVertical", "./assets/bulletVertical.png");
 
-    assets->AddFont("font1", "./assets/MINECRAFT.TTF", 24);
-    assets->AddFont("font2", "./assets/MINECRAFT.TTF", 36);
+    assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
+    assets->AddFont("font2", "./assets/MINECRAFT.TTF", 72);
 
     map = new Map("terrain", 2, 32, manager);
     map->LoadMap("./assets/Level1Map.map", 60, 34);
@@ -86,9 +88,10 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     // Setup player entity
     player.addComponent<TransformComponent>(400, 320, 32, 32, 3);
     player.addComponent<SpriteComponent>("player", true);
-    player.addComponent<KeyboardController>();
     player.addComponent<ColliderComponent>("player");
     player.addComponent<HealthComponent>(100);
+    player.addComponent<AmmoComponent>(30, 10);
+    player.addComponent<KeyboardController>();
     player.addGroup(Game::groupPlayers);
 
     // Setup enemy entity
@@ -99,12 +102,17 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     enemy.addComponent<EnemyAIComponent>(manager);
     enemy.addGroup(Game::groupEnemies);
 
-    // Setup UI entities
-    healthbar.addComponent<UILabel>(10, 10, "Test", "font1", white);
-    gameover.addComponent<UILabel>(300, 320, "", "font2", white);
+    // Setup UI entities with improved positioning for larger fonts
+    healthbar.addComponent<UILabel>(20, 20, "Test", "font1", white);
+    ammobar.addComponent<UILabel>(20, 60, "Test", "font1", white);
+    gameover.addComponent<UILabel>(0, 0, "", "font2", white);  // Position will be set dynamically
 
-    // Create an object (clue)
+    // Create an object
     assets->CreateObject(600, 800, "clue");
+    
+    // Create magazine pickups
+    assets->CreateMagazine(500, 400);
+    assets->CreateMagazine(700, 600);
 }
 
 void Game::handleEvents()
@@ -127,9 +135,15 @@ void Game::update()
     
     // Update health display
     int health = player.getComponent<HealthComponent>().health;
-    std::stringstream ss;
-    ss << "Player Health: " << health;
-    healthbar.getComponent<UILabel>().SetLabelText(ss.str(), "font1");
+    std::stringstream healthSS;
+    healthSS << "Health: " << health;
+    healthbar.getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
+    
+    // Update ammo display
+    int ammo = player.getComponent<AmmoComponent>().currentAmmo;
+    std::stringstream ammoSS;
+    ammoSS << "Ammo: " << ammo;
+    ammobar.getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
 
     // Save player position before movement
     Vector2D playerPos = player.getComponent<TransformComponent>().position;
@@ -163,14 +177,21 @@ void Game::update()
         }
     }
 
-    // Player collision with objects (clues)
+    // Player collision with objects (clues and magazines)
     if (objectCollisionsEnabled) {
         for(auto& o : objects) {
             if(Collision::AABB(player.getComponent<ColliderComponent>().collider, 
                             o->getComponent<ColliderComponent>().collider)) {
-                std::cout << "Clue picked up" << std::endl;
-                player.getComponent<HealthComponent>().heal(20);
-                o->destroy();
+                if (o->getComponent<ColliderComponent>().tag == "magazine") {
+                    std::cout << "Magazine picked up" << std::endl;
+                    player.getComponent<AmmoComponent>().addAmmo();
+                    o->destroy();
+                }
+                else if (o->getComponent<ColliderComponent>().tag == "object") {
+                    std::cout << "Clue picked up" << std::endl;
+                    player.getComponent<HealthComponent>().heal(20);
+                    o->destroy();
+                }
             }
         }
     }
@@ -214,8 +235,19 @@ void Game::update()
     
     // Check player death
     if(player.getComponent<HealthComponent>().health <= 0) {
-        gameover.getComponent<UILabel>().SetLabelText("Game Over", "font2");
+        gameover.getComponent<UILabel>().SetLabelText("GAME OVER", "font2");
+        
+        // Center the text horizontally and vertically on 1920x1080 resolution
+        int textWidth = gameover.getComponent<UILabel>().GetWidth();
+        int textHeight = gameover.getComponent<UILabel>().GetHeight();
+        
+        int xPos = (1920 - textWidth) / 2;
+        int yPos = (1080 - textHeight) / 2;
+        
+        gameover.getComponent<UILabel>().SetPosition(xPos, yPos);
+        
         healthbar.getComponent<UILabel>().SetLabelText("", "font1");
+        ammobar.getComponent<UILabel>().SetLabelText("", "font1");
         player.destroy();
         //isRunning = false;
     }
@@ -235,6 +267,7 @@ void Game::render()
     
     // Render UI elements
     healthbar.draw();
+    ammobar.draw();
     gameover.draw();
 
     SDL_RenderPresent(renderer);

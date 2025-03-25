@@ -8,6 +8,7 @@ class KeyboardController : public Component {
     public:
         TransformComponent *transform;
         SpriteComponent *sprite;
+        AmmoComponent *ammo;
         char playerInput;
         Uint32 lastShotTime;
         const Uint32 shotCooldown = 350;
@@ -24,6 +25,14 @@ class KeyboardController : public Component {
         void init() override {
             transform = &entity->getComponent<TransformComponent>();
             sprite = &entity->getComponent<SpriteComponent>();
+            
+            // Check if entity has AmmoComponent
+            if(entity->hasComponent<AmmoComponent>()) {
+                ammo = &entity->getComponent<AmmoComponent>();
+            } else {
+                ammo = nullptr;
+            }
+            
             lastShotTime = 0;
             isMoving = false;
         }
@@ -98,9 +107,17 @@ class KeyboardController : public Component {
 
             // Handle shooting
             if (keyState[SDL_SCANCODE_SPACE]) {
-                if (SDL_GetTicks() - lastShotTime >= shotCooldown) {
+                bool canShoot = true;
+                if(ammo != nullptr) {
+                    canShoot = ammo->canShoot();
+                }
+                
+                if (SDL_GetTicks() - lastShotTime >= shotCooldown && canShoot) {
+                    // Play shooting animation
                     sprite->Play(playerDirection);
                     sprite->SetFlip(playerFlip);
+                    
+                    // Create projectile
                     Game::assets->CreateProjectile(
                         Vector2D(transform->position.x + offsetX, transform->position.y + offsetY),
                         Vector2D(velX, velY),
@@ -109,19 +126,25 @@ class KeyboardController : public Component {
                         direction,
                         bulletFlip
                     );
+                    
+                    // Decrease ammo
+                    if(ammo != nullptr) {
+                        ammo->shoot();
+                    }
+                    
+                    // Reset shot cooldown timer
                     lastShotTime = SDL_GetTicks();
                 }
+            }
+            else if (!isMoving && wasMoving) {
+                // Return to idle animation when not moving and not shooting
+                sprite->Play("Idle");
+                sprite->spriteFlip = playerFlip;
             }
 
             // Handle ESC to quit
             if (keyState[SDL_SCANCODE_ESCAPE]) {
                 Game::isRunning = false;
-            }
-
-            // Handle idle state
-            if (!isMoving && wasMoving) {
-                sprite->Play("Idle");
-                sprite->spriteFlip = SDL_FLIP_NONE;
             }
         }
 };

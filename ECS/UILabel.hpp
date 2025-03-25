@@ -30,6 +30,23 @@ class UILabel : public Component {
             SDL_RenderCopy(Game::renderer, this->labelTexture, nullptr, &this->position);
             SDL_DestroyTexture(this->labelTexture);
         }
+        
+        // Get width of the rendered text
+        int GetWidth() const {
+            return position.w;
+        }
+        
+        // Get height of the rendered text
+        int GetHeight() const {
+            return position.h;
+        }
+        
+        // Set position of the label
+        void SetPosition(int x, int y) {
+            position.x = x;
+            position.y = y;
+        }
+        
     private:
         SDL_Rect position;
         std::string labelText;

@@ -12,6 +12,7 @@ class SpriteComponent : public Component {
         TransformComponent *transform;
         SDL_Texture *texture;
         SDL_Rect srcRect, destRect;
+        std::string textureID;
 
         bool animated = false;
         int frames = 0;
@@ -26,10 +27,12 @@ class SpriteComponent : public Component {
 
         SpriteComponent() = default;
         SpriteComponent(std::string id) {
+            textureID = id;
             setTex(id);
         }
 
         SpriteComponent(std::string id, bool isAnimated) {
+            textureID = id;
             animated = isAnimated;
 
             Animation idle = Animation(0, 3, 100);
@@ -42,7 +45,8 @@ class SpriteComponent : public Component {
             Animation shootUp = Animation(6, 4, 100);
 
             Animation clue = Animation(0, 7, 100);
-
+            Animation magazine = Animation(0, 7, 100);
+            
             animations.emplace("Idle", idle);
             animations.emplace("Walk", walk);
             animations.emplace("WalkDown", walkDown);
@@ -51,6 +55,7 @@ class SpriteComponent : public Component {
             animations.emplace("ShootDown", shootDown);
             animations.emplace("ShootUp", shootUp);
             animations.emplace("Clue", clue);
+            animations.emplace("Magazine", magazine);
 
             Play("Idle");
 
@@ -60,7 +65,12 @@ class SpriteComponent : public Component {
             
         }
         void setTex(std::string id) {
+            textureID = id;
             texture = Game::assets->GetTexture(id);
+        }
+
+        std::string getTexID() const {
+            return textureID;
         }
 
         void init() override {
