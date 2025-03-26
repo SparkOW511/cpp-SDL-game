@@ -64,6 +64,6 @@ class ColliderComponent : public Component {
 
     void draw() override {
         // Make colliders visible for debugging
-        TextureManager::Draw(tex, srcR, destR, SDL_FLIP_NONE);
+        // TextureManager::Draw(tex, srcR, destR, SDL_FLIP_NONE);
     }
 };

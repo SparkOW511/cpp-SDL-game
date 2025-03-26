@@ -14,9 +14,13 @@ class UILabel : public Component {
             position.y = ypos;
 
             SetLabelText(labelText, labelFont);
-
         }
+        
         ~UILabel() {}
+        
+        void init() override {
+            entity->addGroup(Game::groupUI);
+        }
 
         void SetLabelText(std::string text, std::string font) {
             SDL_Surface* surf = TTF_RenderText_Blended(Game::assets->GetFont(font), text.c_str(), textColor);

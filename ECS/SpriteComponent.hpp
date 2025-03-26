@@ -46,7 +46,8 @@ class SpriteComponent : public Component {
 
             Animation clue = Animation(0, 7, 100);
             Animation magazine = Animation(0, 7, 100);
-            
+            Animation healthpotion = Animation(0, 8, 150);
+
             animations.emplace("Idle", idle);
             animations.emplace("Walk", walk);
             animations.emplace("WalkDown", walkDown);
@@ -56,7 +57,8 @@ class SpriteComponent : public Component {
             animations.emplace("ShootUp", shootUp);
             animations.emplace("Clue", clue);
             animations.emplace("Magazine", magazine);
-
+            animations.emplace("Healthpotion", healthpotion);
+            
             Play("Idle");
 
             setTex(id);

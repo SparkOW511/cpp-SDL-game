@@ -11,3 +11,4 @@
 #include "HealthComponent.hpp"
 #include "AmmoComponent.hpp"
 #include "KeyboardController.hpp"
+#include "ObjectComponent.hpp"

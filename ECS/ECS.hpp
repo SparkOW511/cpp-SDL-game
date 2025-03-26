@@ -145,6 +145,39 @@ class Manager {
             std::end(entities));
         }
 
+        void clear() {
+            // Clear all entity groups
+            for(auto i(0u); i < maxGroups; i++) {
+                groupedEntities[i].clear();
+            }
+            
+            // Clear all entities
+            entities.clear();
+            
+            // Clear all systems
+            systems.clear();
+        }
+        
+        // Clears all entities except those in the preserveGroup
+        void clearAllExcept(Group preserveGroup) {
+            // Mark entities not in the preserve group for deletion
+            for (auto& e : entities) {
+                if (!e->hasGroup(preserveGroup)) {
+                    e->destroy();
+                }
+            }
+            
+            // Refresh to remove destroyed entities
+            refresh();
+            
+            // Clear empty groups (except the preserved one)
+            for (auto i(0u); i < maxGroups; i++) {
+                if (i != preserveGroup) {
+                    groupedEntities[i].clear();
+                }
+            }
+        }
+
         void AddToGroup(Entity* mEntity, Group mGroup) {
             groupedEntities[mGroup].emplace_back(mEntity);
         }
@@ -153,8 +186,16 @@ class Manager {
             return groupedEntities[mGroup];
         }
 
+        Entity* getEntityByGroup(Group mGroup, size_t index) {
+            auto& group = groupedEntities[mGroup];
+            if (index < group.size()) {
+                return group[index];
+            }
+            return nullptr;
+        }
+
         Entity& addEntity() {
-            Entity * e = new Entity(*this);
+            Entity* e = new Entity(*this);
             std::unique_ptr<Entity> uPtr{ e };
             entities.emplace_back(std::move(uPtr));
             return *e;

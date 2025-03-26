@@ -22,6 +22,8 @@ class Game {
         void update();
         void render();
         void clean();
+        void restart();
+        void initEntities();
         bool running() { return isRunning; }
 
         
@@ -30,6 +32,10 @@ class Game {
         static bool isRunning;
         static SDL_Rect camera;
         static AssetManager* assets;
+        static int totalClues;
+        static int collectedClues;
+        static bool gameOver;
+        static bool playerWon;
 
         enum groupLabels : std::size_t {
             groupMap,
@@ -37,7 +43,8 @@ class Game {
             groupEnemies,
             groupColliders,
             groupProjectiles,
-            groupObjects
+            groupObjects,
+            groupUI
         };
 
     private:

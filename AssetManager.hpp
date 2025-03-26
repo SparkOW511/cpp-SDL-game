@@ -14,8 +14,7 @@ class AssetManager {
 
         void CreateProjectile(Vector2D pos, Vector2D vel, int range, int speed, std::string id, SDL_RendererFlip bulletFlip);
 
-        void CreateObject(int posX, int posY, std::string id);
-        void CreateMagazine(int posX, int posY);
+        void CreateObject(int x, int y, std::string id);
         //Texture
         void AddTexture(std::string id, const char* path);
         SDL_Texture* GetTexture(std::string id);
