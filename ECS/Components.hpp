@@ -12,3 +12,4 @@
 #include "AmmoComponent.hpp"
 #include "KeyboardController.hpp"
 #include "ObjectComponent.hpp"
+#include "EnemyAIComponent.hpp"

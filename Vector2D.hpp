@@ -32,4 +32,17 @@ class Vector2D {
         Vector2D operator/(float scalar) const { return Vector2D(x / scalar, y / scalar); }
         float magnitude() const;
         Vector2D normalize() const;
+
+        // Comparison operators for use in STL containers like set
+        bool operator==(const Vector2D& other) const {
+            return x == other.x && y == other.y;
+        }
+        
+        bool operator!=(const Vector2D& other) const {
+            return !(*this == other);
+        }
+        
+        bool operator<(const Vector2D& other) const {
+            return (x < other.x) || (x == other.x && y < other.y);
+        }
 };

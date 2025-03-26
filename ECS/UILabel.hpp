@@ -29,10 +29,18 @@ class UILabel : public Component {
 
             SDL_QueryTexture(labelTexture, nullptr, nullptr, &position.w, &position.h);
         }
+        
+        void SetLabelText(std::string text, std::string font, SDL_Color color) {
+            textColor = color;
+            SDL_Surface* surf = TTF_RenderText_Blended(Game::assets->GetFont(font), text.c_str(), textColor);
+            labelTexture = SDL_CreateTextureFromSurface(Game::renderer, surf);
+            SDL_FreeSurface(surf);
+
+            SDL_QueryTexture(labelTexture, nullptr, nullptr, &position.w, &position.h);
+        }
 
         void draw() override{
             SDL_RenderCopy(Game::renderer, this->labelTexture, nullptr, &this->position);
-            SDL_DestroyTexture(this->labelTexture);
         }
         
         // Get width of the rendered text
