@@ -257,181 +257,223 @@ void Game::update()
     float deltaTime = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
     
-    // Always keep game state updated, even during a question
-    int health = player->getComponent<HealthComponent>().health;
-    std::stringstream healthSS;
-    healthSS << "Health: " << health;
-    healthbar->getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
+    // Always refresh entity manager for proper lifecycle management
+    manager.refresh();
     
-    int ammo = player->getComponent<AmmoComponent>().currentAmmo;
-    std::stringstream ammoSS;
-    ammoSS << "Ammo: " << ammo;
-    ammobar->getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
+    // Handle animations for all entities regardless of game state
+    for(auto& p : *players) {
+        if (p->hasComponent<SpriteComponent>()) {
+            p->getComponent<SpriteComponent>().update();
+        }
+    }
+    
+    for(auto& e : *enemies) {
+        if (e->hasComponent<SpriteComponent>()) {
+            e->getComponent<SpriteComponent>().update();
+        }
+        // Continue enemy movement animations if not in question mode
+        if (!questionActive && !gameOver && e->hasComponent<EnemyAIComponent>()) {
+            e->getComponent<EnemyAIComponent>().update();
+        } else if ((questionActive || gameOver) && e->hasComponent<SpriteComponent>()) {
+            // Ensure enemies stay in idle animation during question mode or game over
+            e->getComponent<SpriteComponent>().Play("Idle");
+        }
+    }
+    
+    for(auto& p : *projectiles) {
+        if (p->hasComponent<SpriteComponent>()) {
+            p->getComponent<SpriteComponent>().update();
+        }
+    }
+    
+    for(auto& o : *objects) {
+        if(o->hasComponent<SpriteComponent>()) {
+            o->getComponent<SpriteComponent>().update();
+        }
+    }
+    
+    // Only update player-related UI if the player exists and game is not over
+    if (player != nullptr && player->isActive() && !gameOver) {
+        // Keep game state updated for UI elements
+        int health = player->getComponent<HealthComponent>().health;
+        std::stringstream healthSS;
+        healthSS << "Health: " << health;
+        healthbar->getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
+        
+        int ammo = player->getComponent<AmmoComponent>().currentAmmo;
+        std::stringstream ammoSS;
+        ammoSS << "Ammo: " << ammo;
+        ammobar->getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
 
-    std::stringstream clueSS;
-    clueSS << "Clues: " << collectedClues << "/" << totalClues;
-    clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
+        std::stringstream clueSS;
+        clueSS << "Clues: " << collectedClues << "/" << totalClues;
+        clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
+    }
 
     // Check if feedback timer has expired
     if (showFeedback && (currentTime - feedbackStartTime > 1500)) {
         closeQuestion();
     }
 
-    // If a question is active, skip the game logic but continue processing animations
-    if (questionActive) {
-        manager.refresh(); // Still handle entity lifecycle
-        
-        // Ensure player doesn't move during questions
-        if (player != nullptr && player->hasComponent<TransformComponent>()) {
+    // If game is in question mode or game over, skip gameplay logic but continue animations
+    if (questionActive || gameOver) {
+        // Ensure player doesn't move during questions if player exists
+        if (questionActive && player != nullptr && player->isActive() && 
+            player->hasComponent<TransformComponent>()) {
             player->getComponent<TransformComponent>().velocity.x = 0;
             player->getComponent<TransformComponent>().velocity.y = 0;
         }
-        
-        // Continue animating player and entities but don't update their AI
-        for(auto& p : *players) {
-            p->getComponent<SpriteComponent>().update();
-        }
-        
-        for(auto& e : *enemies) {
-            // Only update sprites, not the AI components
-                e->getComponent<SpriteComponent>().update();
-        }
-        
         return;
     }
     
-    // Continue with regular game update logic
-    Vector2D playerPos = player->getComponent<TransformComponent>().position;
-    
-    manager.refresh();
-    manager.update();
-    
-    SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
-    
-    damageTimer -= 1.0f/60.0f;
-    
-    if (!objectCollisionsEnabled) {
-        objectCollisionDelay -= 1.0f/60.0f;
-        if (objectCollisionDelay <= 0.0f) {
-            objectCollisionsEnabled = true;
-        }
-    }
-
-    // Handle object collisions
-    if (objectCollisionsEnabled) {
-        for (auto& o : *objects) {
-            if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
-                              o->getComponent<ColliderComponent>().collider)) {
-                if (o->getComponent<ColliderComponent>().tag == "clue") {
-                    showQuestion(o);
-                }
-                else if (o->getComponent<ColliderComponent>().tag == "magazine") {
-                    player->getComponent<AmmoComponent>().addAmmo();
-                    o->destroy();
-                }
-                else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
-                    player->getComponent<HealthComponent>().heal(20);
-                    o->destroy();
-                }
-            }
-        }
-    }
-
-    // Player collision with terrain
-    for(auto& c : *colliders) {
-        SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+    // Continue with regular game update logic - only if player exists
+    if (player != nullptr && player->isActive()) {
+        Vector2D playerPos = player->getComponent<TransformComponent>().position;
         
-        // Check if collision happened
-        if(Collision::AABB(cCol, playerCol)) {
-            // Simply restore player to previous position before movement
-            player->getComponent<TransformComponent>().position = playerPos;
-            // Update collider position
-            player->getComponent<ColliderComponent>().update();
-        }
-    }
-
-    // Enemy collision with projectiles and player
-    for(auto& e : *enemies) {
-        // Projectile collision
-        for(auto& p : *projectiles) {
-            if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
-                            p->getComponent<ColliderComponent>().collider)) {
-                e->getComponent<HealthComponent>().takeDamage(25);
-                p->destroy();
+        manager.update();
+        
+        SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
+        
+        damageTimer -= 1.0f/60.0f;
+        
+        if (!objectCollisionsEnabled) {
+            objectCollisionDelay -= 1.0f/60.0f;
+            if (objectCollisionDelay <= 0.0f) {
+                objectCollisionsEnabled = true;
             }
         }
 
-        // Player collision with damage cooldown
-        SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
-        if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
-            player->getComponent<HealthComponent>().takeDamage(5);
-            damageTimer = damageCooldown;
+        // Handle object collisions
+        if (objectCollisionsEnabled) {
+            for (auto& o : *objects) {
+                if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
+                                o->getComponent<ColliderComponent>().collider)) {
+                    if (o->getComponent<ColliderComponent>().tag == "clue") {
+                        showQuestion(o);
+                    }
+                    else if (o->getComponent<ColliderComponent>().tag == "magazine") {
+                        player->getComponent<AmmoComponent>().addAmmo();
+                        o->destroy();
+                    }
+                    else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
+                        player->getComponent<HealthComponent>().heal(20);
+                        o->destroy();
+                    }
+                }
+            }
         }
 
-        // Destroy dead enemies
-        if(e->getComponent<HealthComponent>().health <= 0) {
-            e->destroy();
+        // Player collision with terrain
+        for(auto& c : *colliders) {
+            SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+            
+            // Check if collision happened
+            if(Collision::AABB(cCol, playerCol)) {
+                // Simply restore player to previous position before movement
+                player->getComponent<TransformComponent>().position = playerPos;
+                // Update collider position
+                player->getComponent<ColliderComponent>().update();
+            }
         }
-    }
 
-    // Center camera on player
-    camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
-    camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
+        // Enemy collision with projectiles and player
+        for(auto& e : *enemies) {
+            // Projectile collision
+            for(auto& p : *projectiles) {
+                if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
+                                p->getComponent<ColliderComponent>().collider)) {
+                    e->getComponent<HealthComponent>().takeDamage(25);
+                    p->destroy();
+                }
+            }
 
-    // Camera bounds
-    int worldWidth = 60 * 32 * 2;
-    int worldHeight = 34 * 32 * 2;
-    if(camera.x < 0) camera.x = 0;
-    if(camera.y < 0) camera.y = 0;
-    if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
-    if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
-    
-    // Check win condition
-    if (collectedClues >= totalClues) {
-        // Show game over message
-        gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
+            // Player collision with damage cooldown
+            SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
+            if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
+                player->getComponent<HealthComponent>().takeDamage(5);
+                damageTimer = damageCooldown;
+            }
+
+            // Destroy dead enemies
+            if(e->getComponent<HealthComponent>().health <= 0) {
+                e->destroy();
+            }
+        }
+
+        // Center camera on player
+        camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
+        camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
+
+        // Camera bounds
+        int worldWidth = 60 * 32 * 2;
+        int worldHeight = 34 * 32 * 2;
+        if(camera.x < 0) camera.x = 0;
+        if(camera.y < 0) camera.y = 0;
+        if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
+        if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
         
-        // Center the win text
-        int textWidth = gameover->getComponent<UILabel>().GetWidth();
-        int textHeight = gameover->getComponent<UILabel>().GetHeight();
+        // Check win condition
+        if (collectedClues >= totalClues) {
+            // Show game over message
+            gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
+            
+            // Center the win text
+            int textWidth = gameover->getComponent<UILabel>().GetWidth();
+            int textHeight = gameover->getComponent<UILabel>().GetHeight();
+            
+            int xPos = (1920 - textWidth) / 2;
+            int yPos = (1080 - textHeight) / 2;
+            
+            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+            
+            // Hide UI elements except game over message
+            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+            
+            // Reset all enemy animations to idle
+            for(auto& e : *enemies) {
+                if(e->hasComponent<SpriteComponent>()) {
+                    e->getComponent<SpriteComponent>().Play("Idle");
+                }
+            }
+            
+            player->destroy();
+            gameOver = true;
+            playerWon = true;
+        }
         
-        int xPos = (1920 - textWidth) / 2;
-        int yPos = (1080 - textHeight) / 2;
-        
-        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-        
-        // Hide UI elements except game over message
-        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-        
-        player->destroy();
-        gameOver = true;
-        playerWon = true;
-    }
-    
-    // Check player death
-    if(player->getComponent<HealthComponent>().health <= 0) {
-        // Show game over message
-        gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
-        
-        // Center the text horizontally and vertically on 1920x1080 resolution
-        int textWidth = gameover->getComponent<UILabel>().GetWidth();
-        int textHeight = gameover->getComponent<UILabel>().GetHeight();
-        
-        int xPos = (1920 - textWidth) / 2;
-        int yPos = (1080 - textHeight) / 2;
-        
-        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-        
-        // Hide UI elements except game over message
-        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-        
-        player->destroy();
-        gameOver = true;
-        playerWon = false;
+        // Check player death
+        if(player->getComponent<HealthComponent>().health <= 0) {
+            // Show game over message
+            gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
+            
+            // Center the text horizontally and vertically on 1920x1080 resolution
+            int textWidth = gameover->getComponent<UILabel>().GetWidth();
+            int textHeight = gameover->getComponent<UILabel>().GetHeight();
+            
+            int xPos = (1920 - textWidth) / 2;
+            int yPos = (1080 - textHeight) / 2;
+            
+            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+            
+            // Hide UI elements except game over message
+            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+            
+            // Reset all enemy animations to idle
+            for(auto& e : *enemies) {
+                if(e->hasComponent<SpriteComponent>()) {
+                    e->getComponent<SpriteComponent>().Play("Idle");
+                }
+            }
+            
+            // Set game over state before destroying player 
+            gameOver = true;
+            playerWon = false;
+            player->destroy();
+        }
     }
 }
 
@@ -525,8 +567,13 @@ void Game::showQuestion(Entity* clueEntity) {
     pendingClueEntity = clueEntity;
     
     // Set player to idle animation when entering question mode
-    if (player != nullptr) {
+    if (player != nullptr && player->isActive()) {
         player->getComponent<SpriteComponent>().Play("Idle");
+        
+        // Disable keyboard controls during question mode
+        if (player->hasComponent<KeyboardController>()) {
+            player->getComponent<KeyboardController>().enabled = false;
+        }
     }
     
     // Set all enemies to idle animation
@@ -594,6 +641,11 @@ void Game::closeQuestion() {
     pendingClueEntity = nullptr;
     showFeedback = false;
     
+    // Re-enable keyboard controls if player exists
+    if (player != nullptr && player->isActive() && player->hasComponent<KeyboardController>()) {
+        player->getComponent<KeyboardController>().enabled = true;
+    }
+    
     questionLabel->getComponent<UILabel>().SetLabelText("", "font1");
     answer1Label->getComponent<UILabel>().SetLabelText("", "font1");
     answer2Label->getComponent<UILabel>().SetLabelText("", "font1");
@@ -615,7 +667,6 @@ Vector2D Game::findRandomSpawnPosition() {
         {34*64, 11*64},
         {39*64, 4*64},
         {40*64, 16*64},
-        {45*64, 7*64},
         {53*64, 11*64},
         {50*64, 20*64}
     };
@@ -630,11 +681,12 @@ Vector2D Game::findRandomCluePosition() {
     const std::vector<Vector2D> cluePoints = {
         {10*64, 3*64},
         {8*64, 13*64},
-        {19*64, 8*64},
+        {18*64, 7*64},
         {17*64, 24*64},
         {22*64, 17*64},
         {32*64, 35*64},
-        {47*64, 2*64}
+        {47*64, 2*64},
+        {30*64, 6*64}
     };
     
     // Create a list of available positions (not used yet)
@@ -668,7 +720,7 @@ Vector2D Game::findRandomMagazinePosition() {
         {19*64, 2*64},
         {34*64, 5*64},
         {43*64, 10*64},
-        {15*64, 11*64},
+        {14*64, 12*64},
         {27*64, 12*64},
         {35*64, 17*64},
         {15*64, 21*64},
