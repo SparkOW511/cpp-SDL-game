@@ -52,9 +52,10 @@ class KeyboardController : public Component {
             
             const Uint8* keyState = SDL_GetKeyboardState(NULL);
             bool wasMoving = isMoving;
+            bool wasShooting = isShooting;
             isMoving = false;
             
-            // Check if shooting animation should end
+            // First, check if shooting animation should end
             if (isShooting && SDL_GetTicks() - lastShotTime >= shotAnimationDuration) {
                 isShooting = false;
             }
@@ -63,44 +64,27 @@ class KeyboardController : public Component {
             transform->velocity.x = 0;
             transform->velocity.y = 0;
 
-            // Handle movement - prioritize the most recent key press
-            if (!isShooting) {
-                // Handle vertical movement
-                if (keyState[SDL_SCANCODE_W]) {
-                    transform->velocity.y = -1;
-                    sprite->Play("WalkUp");
-                    isMoving = true;
-                }
-                else if (keyState[SDL_SCANCODE_S]) {
-                    transform->velocity.y = 1;
-                    sprite->Play("WalkDown");
-                    isMoving = true;
-                }
-                
-                // Handle horizontal movement
-                if (keyState[SDL_SCANCODE_A]) {
-                    transform->velocity.x = -1;
-                    playerFlip = SDL_FLIP_HORIZONTAL;
-                    
-                    // Only override vertical animation if we're not moving vertically
-                    if (transform->velocity.y == 0) {
-                        sprite->Play("Walk");
-                    }
-                    isMoving = true;
-                }
-                else if (keyState[SDL_SCANCODE_D]) {
-                    transform->velocity.x = 1;
-                    playerFlip = SDL_FLIP_NONE;
-                    
-                    // Only override vertical animation if we're not moving vertically
-                    if (transform->velocity.y == 0) {
-                        sprite->Play("Walk");
-                    }
-                    isMoving = true;
-                }
-                
-                // Always update the sprite flip direction
-                sprite->SetFlip(playerFlip);
+            // Process movement inputs
+            // Handle vertical movement
+            if (keyState[SDL_SCANCODE_W]) {
+                transform->velocity.y = -1;
+                isMoving = true;
+            }
+            else if (keyState[SDL_SCANCODE_S]) {
+                transform->velocity.y = 1;
+                isMoving = true;
+            }
+            
+            // Handle horizontal movement
+            if (keyState[SDL_SCANCODE_A]) {
+                transform->velocity.x = -1;
+                playerFlip = SDL_FLIP_HORIZONTAL;
+                isMoving = true;
+            }
+            else if (keyState[SDL_SCANCODE_D]) {
+                transform->velocity.x = 1;
+                playerFlip = SDL_FLIP_NONE;
+                isMoving = true;
             }
             
             // Update shooting parameters based on movement direction
@@ -169,10 +153,7 @@ class KeyboardController : public Component {
                 if (SDL_GetTicks() - lastShotTime >= shotCooldown && canShoot) {
                     // Set shooting state
                     isShooting = true;
-                    
-                    // Play shooting animation
-                    sprite->Play(playerDirection);
-                    sprite->SetFlip(playerFlip);
+                    wasShooting = false; // Force animation change
                     
                     // Create projectile
                     Game::assets->CreateProjectile(
@@ -194,13 +175,28 @@ class KeyboardController : public Component {
                 }
             }
             
-            // Return to idle animation when shooting animation ends or when stopping movement
-            if (!isShooting && !isMoving && wasMoving) {
-                sprite->Play("Idle");
+            // Animation handling - prioritize shooting over movement
+            if (isShooting) {
+                // Play or maintain shooting animation
+                sprite->Play(playerDirection);
                 sprite->SetFlip(playerFlip);
-            }
-            else if (isShooting && !wasMoving) {
-                // Make sure we maintain the proper flip direction during shooting
+            } 
+            else if (isMoving) {
+                // Handle movement animations
+                if (transform->velocity.y < 0) {
+                    sprite->Play("WalkUp");
+                } 
+                else if (transform->velocity.y > 0) {
+                    sprite->Play("WalkDown");
+                }
+                else if (transform->velocity.x != 0) {
+                    sprite->Play("Walk");
+                }
+                sprite->SetFlip(playerFlip);
+            } 
+            else if (wasShooting || (!isMoving && wasMoving)) {
+                // Just stopped shooting or moving - return to idle
+                sprite->Play("Idle");
                 sprite->SetFlip(playerFlip);
             }
 
