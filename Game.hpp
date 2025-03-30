@@ -38,6 +38,11 @@ class Game {
         void checkAnswer(int selectedAnswer);
         void closeQuestion();
 
+        // Level management methods
+        void loadLevel(int levelNum);
+        void advanceToNextLevel();
+        void updateTransition();
+        void renderTransition();
         
         static SDL_Renderer *renderer;
         static SDL_Event event;
@@ -55,6 +60,13 @@ class Game {
         static bool showFeedback;
         static Uint32 feedbackStartTime;
         static Entity* feedbackLabel;
+        static int currentLevel;
+        static int maxLevels;
+        static bool isTransitioning;
+        static Uint32 transitionStartTime;
+        static int transitionState;
+        static std::string levelTransitionText;
+        static bool showingExitInstructions; // Tracks if exit instructions have been shown
 
         enum groupLabels : std::size_t {
             groupMap,
@@ -76,6 +88,8 @@ class Game {
         
         bool isAnswerCorrect = false;         // Was the last answer correct
         const Uint32 feedbackDuration = 1500; // How long to show feedback (1.5 seconds)
+        const Uint32 transitionDuration = 3000; // Duration of level transition in milliseconds
+        const Uint32 fadeInOutDuration = 1000; // Duration of fade in/out in milliseconds
         
         // Track used spawn positions to prevent duplicates
         std::set<Vector2D> usedCluePositions;
@@ -98,5 +112,6 @@ class Game {
         Entity* answer3Label = nullptr;
         Entity* answer4Label = nullptr;
         Entity* questionBackground = nullptr;
+        Entity* transitionLabel = nullptr;
 };
 #endif

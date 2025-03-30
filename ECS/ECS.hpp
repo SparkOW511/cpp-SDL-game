@@ -146,36 +146,19 @@ class Manager {
         }
 
         void clear() {
-            // Clear all entity groups
-            for(auto i(0u); i < maxGroups; i++) {
-                groupedEntities[i].clear();
+            for (auto& e : entities) {
+                e->destroy();
             }
-            
-            // Clear all entities
-            entities.clear();
-            
-            // Clear all systems
-            systems.clear();
+            refresh();
         }
         
-        // Clears all entities except those in the preserveGroup
-        void clearAllExcept(Group preserveGroup) {
-            // Mark entities not in the preserve group for deletion
+        void clearAllExcept(Group groupToKeep) {
             for (auto& e : entities) {
-                if (!e->hasGroup(preserveGroup)) {
+                if (!e->hasGroup(groupToKeep)) {
                     e->destroy();
                 }
             }
-            
-            // Refresh to remove destroyed entities
             refresh();
-            
-            // Clear empty groups (except the preserved one)
-            for (auto i(0u); i < maxGroups; i++) {
-                if (i != preserveGroup) {
-                    groupedEntities[i].clear();
-                }
-            }
         }
 
         void AddToGroup(Entity* mEntity, Group mGroup) {

@@ -53,6 +53,13 @@ Entity* Game::pendingClueEntity = nullptr;
 bool Game::showFeedback = false;
 Uint32 Game::feedbackStartTime = 0;
 Entity* Game::feedbackLabel = nullptr;
+int Game::currentLevel = 1;
+int Game::maxLevels = 2; // Set the maximum number of levels here
+bool Game::isTransitioning = false;
+Uint32 Game::transitionStartTime = 0;
+int Game::transitionState = 0; // 0: fade in, 1: show level text, 2: fade out
+std::string Game::levelTransitionText = "";
+bool Game::showingExitInstructions = false; // Initialize to false
 
 Game::Game()
 {
@@ -85,6 +92,7 @@ void Game::initEntities() {
     gameover = &manager.addEntity();
     clueCounter = &manager.addEntity();
     feedbackLabel = &manager.addEntity();
+    transitionLabel = &manager.addEntity();
     
     questionLabel = &manager.addEntity();
     answer1Label = &manager.addEntity();
@@ -158,6 +166,7 @@ void Game::initEntities() {
     answer3Label->addComponent<UILabel>(0, 420, "", "font1", white);
     answer4Label->addComponent<UILabel>(0, 460, "", "font1", white);
     feedbackLabel->addComponent<UILabel>(0, 650, "", "font2", white);
+    transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
     
     // No need to manually add UI entities to groupUI as the UILabel component does this automatically
 }
@@ -184,7 +193,10 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         std::cout << "Error initializing SDL_ttf" << std::endl;
     }
 
-    assets->AddTexture("terrain", "./assets/TerrainTexturesLevel1.png");
+    assets = new AssetManager(&manager);
+
+    assets->AddTexture("terrainlvl1", "./assets/lvl1/TerrainTexturesLevel1.png");
+    assets->AddTexture("terrainlvl2", "./assets/lvl2/TerrainTexturesLevel2.png");
     assets->AddTexture("player", "./assets/playeranimations.png");
     assets->AddTexture("enemy", "./assets/enemyanimations.png");
     assets->AddTexture("clue", "./assets/clue.png");
@@ -192,11 +204,11 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddTexture("bulletHorizontal", "./assets/bulletHorizontal.png");
     assets->AddTexture("bulletVertical", "./assets/bulletVertical.png");
     assets->AddTexture("healthpotion", "./assets/healthpotion.png");
+    assets->AddTexture("cactus", "./assets/cactus.png");
     assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
     assets->AddFont("font2", "./assets/MINECRAFT.TTF", 72);
 
-    map = new Map("terrain", 2, 32, manager);
-    map->LoadMap("./assets/Level1Map.map", 60, 34);
+    loadLevel(currentLevel);
 
     // Initialize all game entities and objects
     initEntities();
@@ -260,6 +272,12 @@ void Game::update()
     // Always refresh entity manager for proper lifecycle management
     manager.refresh();
     
+    // Handle transition if active
+    if (isTransitioning) {
+        updateTransition();
+        return;
+    }
+    
     // Handle animations for all entities regardless of game state
     for(auto& p : *players) {
         if (p->hasComponent<SpriteComponent>()) {
@@ -311,8 +329,13 @@ void Game::update()
     }
 
     // Check if feedback timer has expired
-    if (showFeedback && (currentTime - feedbackStartTime > 1500)) {
-        closeQuestion();
+    if (showFeedback) {
+        // For regular feedback from questions
+        if (!showingExitInstructions && (currentTime - feedbackStartTime > 1500)) {
+            closeQuestion();
+        } 
+        // For exit instructions, keep visible until player reaches exit
+        // Don't hide the "head north" message
     }
 
     // If game is in question mode or game over, skip gameplay logic but continue animations
@@ -414,33 +437,58 @@ void Game::update()
         
         // Check win condition
         if (collectedClues >= totalClues) {
-            // Show game over message
-            gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
-            
-            // Center the win text
-            int textWidth = gameover->getComponent<UILabel>().GetWidth();
-            int textHeight = gameover->getComponent<UILabel>().GetHeight();
-            
-            int xPos = (1920 - textWidth) / 2;
-            int yPos = (1080 - textHeight) / 2;
-            
-            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-            
-            // Hide UI elements except game over message
-            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-            
-            // Reset all enemy animations to idle
-            for(auto& e : *enemies) {
-                if(e->hasComponent<SpriteComponent>()) {
-                    e->getComponent<SpriteComponent>().Play("Idle");
-                }
+            // All clues collected, but still require player to go north
+            if (!showingExitInstructions) {
+                // Show instructions to player only once
+                feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
+                
+                // Position the feedback at the bottom of the screen
+                int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+                int xPos = (1920 - feedbackWidth) / 2;
+                feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
+                
+                // Show feedback
+                showFeedback = true;
+                feedbackStartTime = SDL_GetTicks();
+                showingExitInstructions = true;
             }
             
-            player->destroy();
-            gameOver = true;
-            playerWon = true;
+            // Check if player has gone far enough north
+            if (player->getComponent<TransformComponent>().position.y < 100) {
+                // Player has gone north enough, proceed to next level
+                if (currentLevel < maxLevels) {
+                    // Advance to next level
+                    advanceToNextLevel();
+                } else {
+                    // Show final win message if all levels completed
+                    gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
+                    
+                    // Center the win text
+                    int textWidth = gameover->getComponent<UILabel>().GetWidth();
+                    int textHeight = gameover->getComponent<UILabel>().GetHeight();
+                    
+                    int xPos = (1920 - textWidth) / 2;
+                    int yPos = (1080 - textHeight) / 2;
+                    
+                    gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+                    
+                    // Hide UI elements except game over message
+                    healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+                    ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+                    clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+                    
+                    // Reset all enemy animations to idle
+                    for(auto& e : *enemies) {
+                        if(e->hasComponent<SpriteComponent>()) {
+                            e->getComponent<SpriteComponent>().Play("Idle");
+                        }
+                    }
+                    
+                    player->destroy();
+                    gameOver = true;
+                    playerWon = true;
+                }
+            }
         }
         
         // Check player death
@@ -481,6 +529,13 @@ void Game::render()
 {
     SDL_RenderClear(renderer);
     
+    // If transitioning, only render the transition screen
+    if (isTransitioning) {
+        renderTransition();
+        SDL_RenderPresent(renderer);
+        return;
+    }
+    
     // Always render game elements
     for(auto& t : *tiles) t->draw();
     for(auto& p : *players) p->draw();
@@ -493,6 +548,23 @@ void Game::render()
     ammobar->draw();
     clueCounter->draw();
     gameover->draw();
+    
+    // Draw feedback if active (for both question feedback and exit instructions)
+    if (showFeedback && feedbackLabel != nullptr) {
+        // Create special background for feedback only for regular feedback, not exit instructions
+        if (!showingExitInstructions) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
+            SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
+            SDL_RenderFillRect(renderer, &feedbackBg);
+        }
+        
+        // Draw the feedback text
+        feedbackLabel->draw();
+        
+        // Reset draw color
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
     
     // Render question UI on top if active
     if (questionActive) {
@@ -508,17 +580,6 @@ void Game::render()
         answer2Label->draw();
         answer3Label->draw();
         answer4Label->draw();
-        
-        // Draw feedback if active with its own background
-        if (showFeedback && feedbackLabel != nullptr) {
-            // Create special background for feedback
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
-            SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
-            SDL_RenderFillRect(renderer, &feedbackBg);
-            
-            // Draw the feedback text
-            feedbackLabel->draw();
-        }
         
         // Reset draw color
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
@@ -546,6 +607,11 @@ void Game::restart() {
     questionActive = false;
     pendingClueEntity = nullptr;
     showFeedback = false;
+    showingExitInstructions = false; // Reset exit instructions flag
+    currentLevel = 1;
+    
+    // Set clue count correctly for level 1
+    totalClues = 3; // Reset to default value, loadLevel will adjust if needed
     
     // Clear tracking of used positions
     usedCluePositions.clear();
@@ -553,8 +619,11 @@ void Game::restart() {
     usedHealthPotionPositions.clear();
     usedEnemyPositions.clear();
     
-    // Clear all entities except the map entities
-    manager.clearAllExcept(Game::groupMap);
+    // Clear all entities
+    manager.clear();
+    
+    // Load first level
+    loadLevel(currentLevel);
     
     // Reinitialize all game entities
     initEntities();
@@ -657,6 +726,12 @@ void Game::closeQuestion() {
 Vector2D Game::findRandomSpawnPosition() {
     static std::mt19937 rng(std::time(nullptr));
     
+    // On level 2, always spawn at bottom center of map
+    if (currentLevel == 2) {
+        return {30*64, 30*64}; // Bottom center of map for level 2
+    }
+    
+    // Random spawns for level 1
     const std::vector<Vector2D> spawnPoints = {
         {8*64, 6*64},
         {12*64, 18*64},
@@ -678,16 +753,34 @@ Vector2D Game::findRandomSpawnPosition() {
 Vector2D Game::findRandomCluePosition() {
     static std::mt19937 rng(std::time(nullptr));
     
-    const std::vector<Vector2D> cluePoints = {
-        {10*64, 3*64},
-        {8*64, 13*64},
-        {18*64, 7*64},
-        {17*64, 24*64},
-        {22*64, 17*64},
-        {32*64, 35*64},
-        {46*64, 2*64},
-        {30*64, 6*64}
-    };
+    std::vector<Vector2D> cluePoints;
+    
+    // Use different spawn positions based on the current level
+    if (currentLevel == 1) {
+        // Level 1 clue positions
+        cluePoints = {
+            {10*64, 3*64},
+            {8*64, 13*64},
+            {18*64, 7*64},
+            {17*64, 24*64},
+            {22*64, 17*64},
+            {32*64, 25*64}, // Fixed position that was 32*64, 35*64 (outside map bounds in level 1)
+            {46*64, 2*64},
+            {30*64, 6*64}
+        };
+    } else {
+        // Level 2 clue positions
+        cluePoints = {
+            {10*64, 3*64},
+            {8*64, 13*64},
+            {18*64, 7*64},
+            {17*64, 24*64},
+            {22*64, 17*64},
+            {32*64, 35*64},
+            {46*64, 2*64},
+            {30*64, 6*64}
+        };
+    }
     
     // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
@@ -821,5 +914,135 @@ Vector2D Game::findRandomEnemyPosition() {
     usedEnemyPositions.insert(selectedPos);
     
     return selectedPos;
+}
+
+void Game::loadLevel(int levelNum) {
+    if (map != nullptr) {
+        delete map;
+    }
+    
+    // Set level-specific properties
+    currentLevel = levelNum;
+    collectedClues = 0;
+    showingExitInstructions = false; // Reset exit instructions flag for new level
+    
+    // Create appropriate map based on level number
+    std::string terrainTexture = "terrainlvl" + std::to_string(levelNum);
+    std::string mapPath = "./assets/lvl" + std::to_string(levelNum) + "/Level" + std::to_string(levelNum) + "Map.map";
+    
+    map = new Map(terrainTexture, 2, 32, manager);
+    map->LoadMap(mapPath, 60, 34);
+}
+
+void Game::advanceToNextLevel() {
+    // Start transition sequence
+    isTransitioning = true;
+    transitionStartTime = SDL_GetTicks();
+    transitionState = 0; // Start with fade in
+    
+    // Set transition text to show between levels
+    std::stringstream levelMessage;
+    levelMessage << "Level " << (currentLevel + 1);
+    levelTransitionText = levelMessage.str();
+    
+    // Center the transition text
+    transitionLabel->getComponent<UILabel>().SetLabelText(levelTransitionText, "font2", white);
+    int textWidth = transitionLabel->getComponent<UILabel>().GetWidth();
+    int textHeight = transitionLabel->getComponent<UILabel>().GetHeight();
+    int xPos = (1920 - textWidth) / 2;
+    int yPos = (1080 - textHeight) / 2;
+    transitionLabel->getComponent<UILabel>().SetPosition(xPos, yPos);
+}
+
+void Game::updateTransition() {
+    Uint32 currentTime = SDL_GetTicks();
+    Uint32 elapsedTime = currentTime - transitionStartTime;
+    
+    // Update transition state based on elapsed time
+    if (transitionState == 0) { // Fade in
+        if (elapsedTime >= fadeInOutDuration) {
+            transitionState = 1; // Move to showing level text
+            transitionStartTime = currentTime;
+        }
+    }
+    else if (transitionState == 1) { // Show level text
+        if (elapsedTime >= transitionDuration - (2 * fadeInOutDuration)) {
+            transitionState = 2; // Move to fade out
+            transitionStartTime = currentTime;
+        }
+    }
+    else if (transitionState == 2) { // Fade out
+        if (elapsedTime >= fadeInOutDuration) {
+            // Transition complete, reset transition state and proceed to next level
+            isTransitioning = false;
+            
+            // Clear all entities except UI
+            manager.clearAllExcept(Game::groupUI);
+            
+            // Reset game state variables for next level
+            collectedClues = 0;
+            damageTimer = 1.0f;
+            objectCollisionDelay = 1.0f;
+            objectCollisionsEnabled = false;
+            questionActive = false;
+            pendingClueEntity = nullptr;
+            showFeedback = false;
+            showingExitInstructions = false; // Reset exit instructions flag
+            
+            // Clear tracking of used positions
+            usedCluePositions.clear();
+            usedMagazinePositions.clear();
+            usedHealthPotionPositions.clear();
+            usedEnemyPositions.clear();
+            
+            // Load the next level
+            currentLevel++;
+            
+            // Clear transition text
+            transitionLabel->getComponent<UILabel>().SetLabelText("", "font2");
+            
+            // Load the new level map
+            loadLevel(currentLevel);
+            
+            // Re-initialize entities for the new level
+            initEntities();
+        }
+    }
+}
+
+void Game::renderTransition() {
+    Uint32 currentTime = SDL_GetTicks();
+    Uint32 elapsedTime = currentTime - transitionStartTime;
+    
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    
+    // Calculate alpha based on transition state
+    Uint8 alpha = 0;
+    
+    if (transitionState == 0) { // Fade in
+        float progress = static_cast<float>(elapsedTime) / fadeInOutDuration;
+        alpha = static_cast<Uint8>(255 * progress);
+    }
+    else if (transitionState == 1) { // Show level text
+        alpha = 255; // Fully opaque
+    }
+    else if (transitionState == 2) { // Fade out
+        float progress = 1.0f - (static_cast<float>(elapsedTime) / fadeInOutDuration);
+        alpha = static_cast<Uint8>(255 * progress);
+    }
+    
+    // Fill screen with black at calculated alpha
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
+    SDL_Rect fullScreen = {0, 0, 1920, 1080};
+    SDL_RenderFillRect(renderer, &fullScreen);
+    
+    // Show level text if in state 1 or 2
+    if (transitionState >= 1 && transitionLabel != nullptr) {
+        transitionLabel->draw();
+    }
+    
+    // Reset renderer settings
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 

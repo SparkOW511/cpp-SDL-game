@@ -21,8 +21,12 @@ class KeyboardController : public Component {
         SDL_RendererFlip playerFlip;
         const char* direction;
         const char* playerDirection;
+        const char* lastPlayerDirection;  // Track last shoot animation direction
         bool isMoving;
         bool isShooting; // Track if player is shooting
+        bool wasShooting; // Track if player was shooting in the previous frame
+        bool facingUp;    // Track if player is facing up
+        bool facingDown;  // Track if player is facing down
         bool enabled = true; // Flag to enable/disable keyboard controls
 
         void init() override {
@@ -39,6 +43,11 @@ class KeyboardController : public Component {
             lastShotTime = 0;
             isMoving = false;
             isShooting = false;
+            wasShooting = false;
+            facingUp = false;
+            facingDown = false;
+            playerDirection = "Idle";
+            lastPlayerDirection = "Idle";
         }
 
         void update() override {
@@ -52,7 +61,7 @@ class KeyboardController : public Component {
             
             const Uint8* keyState = SDL_GetKeyboardState(NULL);
             bool wasMoving = isMoving;
-            bool wasShooting = isShooting;
+            wasShooting = isShooting;
             isMoving = false;
             
             // First, check if shooting animation should end
@@ -69,10 +78,31 @@ class KeyboardController : public Component {
             if (keyState[SDL_SCANCODE_W]) {
                 transform->velocity.y = -1;
                 isMoving = true;
+                facingUp = true;
+                facingDown = false;
+                
+                // Update last direction for shooting
+                playerDirection = "ShootUp";
+                lastPlayerDirection = "ShootUp";
             }
             else if (keyState[SDL_SCANCODE_S]) {
                 transform->velocity.y = 1;
                 isMoving = true;
+                facingDown = true;
+                facingUp = false;
+                
+                // Update last direction for shooting
+                playerDirection = "ShootDown";
+                lastPlayerDirection = "ShootDown";
+            }
+            else {
+                // Keep the facing direction but stop moving vertically
+                if (!isMoving) {
+                    // Only reset these if no other movement
+                    // This preserves diagonal movement intent
+                    facingUp = false;
+                    facingDown = false;
+                }
             }
             
             // Handle horizontal movement
@@ -80,51 +110,90 @@ class KeyboardController : public Component {
                 transform->velocity.x = -1;
                 playerFlip = SDL_FLIP_HORIZONTAL;
                 isMoving = true;
+                
+                // Update last direction for shooting
+                playerDirection = "Shoot";
+                lastPlayerDirection = "Shoot";
+                
+                // If moving horizontally, reset vertical facing flags
+                if (!keyState[SDL_SCANCODE_W] && !keyState[SDL_SCANCODE_S]) {
+                    facingUp = false;
+                    facingDown = false;
+                }
             }
             else if (keyState[SDL_SCANCODE_D]) {
                 transform->velocity.x = 1;
                 playerFlip = SDL_FLIP_NONE;
                 isMoving = true;
+                
+                // Update last direction for shooting
+                playerDirection = "Shoot";
+                lastPlayerDirection = "Shoot";
+                
+                // If moving horizontally, reset vertical facing flags
+                if (!keyState[SDL_SCANCODE_W] && !keyState[SDL_SCANCODE_S]) {
+                    facingUp = false;
+                    facingDown = false;
+                }
             }
             
-            // Update shooting parameters based on movement direction
-            if (transform->velocity.y < 0) { // Moving up
+            // Update shooting parameters based on last movement direction
+            if (facingUp || transform->velocity.y < 0 || lastPlayerDirection == "ShootUp") { // Facing or moving up
                 velX = 0;
                 velY = -3;
                 offsetY = 30;
-                offsetX = 60;
+                
+                // Adjust offset based on the player's horizontal orientation
+                if (playerFlip == SDL_FLIP_HORIZONTAL) {
+                    offsetX = 40; // Offset for left-facing player shooting up
+                } else {
+                    offsetX = 60; // Offset for right-facing player shooting up
+                }
+                
                 bulletFlip = SDL_FLIP_NONE;
-                playerDirection = "ShootUp";
                 direction = "bulletVertical";
+                playerDirection = "ShootUp";
+                // Don't change playerFlip here - maintain horizontal orientation
             }
-            else if (transform->velocity.y > 0) { // Moving down
+            else if (facingDown || transform->velocity.y > 0 || lastPlayerDirection == "ShootDown") { // Facing or moving down
                 velX = 0;
                 velY = 3;
                 offsetY = 30;
-                offsetX = 60;
+                
+                // Adjust offset based on the player's horizontal orientation
+                if (playerFlip == SDL_FLIP_HORIZONTAL) {
+                    offsetX = 40; // Offset for left-facing player shooting down
+                } else {
+                    offsetX = 60; // Offset for right-facing player shooting down
+                }
+                
                 bulletFlip = SDL_FLIP_HORIZONTAL;
-                playerDirection = "ShootDown";
                 direction = "bulletVertical";
+                playerDirection = "ShootDown";
+                // Don't change playerFlip here - maintain horizontal orientation
             }
-            else if (transform->velocity.x != 0) { // Moving horizontally
+            else if (transform->velocity.x != 0 || lastPlayerDirection == "Shoot") { // Moving horizontally
                 velY = 0;
                 offsetY = 25;
-                playerDirection = "Shoot";
                 direction = "bulletHorizontal";
+                playerDirection = "Shoot";
                 
-                if (transform->velocity.x < 0) { // Moving left
+                if (transform->velocity.x < 0 || playerFlip == SDL_FLIP_HORIZONTAL) { // Moving left or facing left
                     velX = -3;
                     offsetX = -35;
                     bulletFlip = SDL_FLIP_HORIZONTAL;
+                    playerFlip = SDL_FLIP_HORIZONTAL;
                 }
-                else { // Moving right
+                else { // Moving right or facing right
                     velX = 3;
                     offsetX = 65;
                     bulletFlip = SDL_FLIP_NONE;
+                    playerFlip = SDL_FLIP_NONE;
                 }
             }
             else {
-                // Use last direction if not moving (for shooting while standing)
+                // Default if no other condition matches
+                // Use last stored facing based on flip
                 if (playerFlip == SDL_FLIP_HORIZONTAL) {
                     velX = -3;
                     velY = 0;
@@ -140,6 +209,7 @@ class KeyboardController : public Component {
                     bulletFlip = SDL_FLIP_NONE;
                 }
                 playerDirection = "Shoot";
+                lastPlayerDirection = "Shoot";
                 direction = "bulletHorizontal";
             }
 
@@ -153,7 +223,6 @@ class KeyboardController : public Component {
                 if (SDL_GetTicks() - lastShotTime >= shotCooldown && canShoot) {
                     // Set shooting state
                     isShooting = true;
-                    wasShooting = false; // Force animation change
                     
                     // Create projectile
                     Game::assets->CreateProjectile(
@@ -177,8 +246,8 @@ class KeyboardController : public Component {
             
             // Animation handling - prioritize shooting over movement
             if (isShooting) {
-                // Play or maintain shooting animation
-                sprite->Play(playerDirection);
+                // Play shooting animation in the appropriate direction
+                sprite->Play(lastPlayerDirection);
                 sprite->SetFlip(playerFlip);
             } 
             else if (isMoving) {
@@ -196,6 +265,7 @@ class KeyboardController : public Component {
             } 
             else if (wasShooting || (!isMoving && wasMoving)) {
                 // Just stopped shooting or moving - return to idle
+                // Determine idle animation based on last direction
                 sprite->Play("Idle");
                 sprite->SetFlip(playerFlip);
             }
