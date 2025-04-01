@@ -193,18 +193,26 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         std::cout << "Error initializing SDL_ttf" << std::endl;
     }
 
+    // Clean up previous asset manager if it exists
+    if(assets != nullptr) {
+        delete assets;
+    }
+    
     assets = new AssetManager(&manager);
 
     assets->AddTexture("terrainlvl1", "./assets/lvl1/TerrainTexturesLevel1.png");
     assets->AddTexture("terrainlvl2", "./assets/lvl2/TerrainTexturesLevel2.png");
+
     assets->AddTexture("player", "./assets/playeranimations.png");
     assets->AddTexture("enemy", "./assets/enemyanimations.png");
+
     assets->AddTexture("clue", "./assets/clue.png");
     assets->AddTexture("magazine", "./assets/magazine.png");
     assets->AddTexture("bulletHorizontal", "./assets/bulletHorizontal.png");
     assets->AddTexture("bulletVertical", "./assets/bulletVertical.png");
     assets->AddTexture("healthpotion", "./assets/healthpotion.png");
     assets->AddTexture("cactus", "./assets/cactus.png");
+    
     assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
     assets->AddFont("font2", "./assets/MINECRAFT.TTF", 72);
 
@@ -619,8 +627,14 @@ void Game::restart() {
     usedHealthPotionPositions.clear();
     usedEnemyPositions.clear();
     
-    // Clear all entities
+    // Clear all entities including UI
     manager.clear();
+    
+    // Make sure map is properly deallocated
+    if (map != nullptr) {
+        delete map;
+        map = nullptr;
+    }
     
     // Load first level
     loadLevel(currentLevel);
@@ -917,8 +931,10 @@ Vector2D Game::findRandomEnemyPosition() {
 }
 
 void Game::loadLevel(int levelNum) {
+    // Make sure to clean up the previous map
     if (map != nullptr) {
         delete map;
+        map = nullptr;
     }
     
     // Set level-specific properties
@@ -930,7 +946,15 @@ void Game::loadLevel(int levelNum) {
     std::string terrainTexture = "terrainlvl" + std::to_string(levelNum);
     std::string mapPath = "./assets/lvl" + std::to_string(levelNum) + "/Level" + std::to_string(levelNum) + "Map.map";
     
+    // Ensure texture is loaded
+    if (Game::assets->GetTexture(terrainTexture) == nullptr) {
+        return;
+    }
+    
+    // Create the map
     map = new Map(terrainTexture, 2, 32, manager);
+    
+    // Load the map data
     map->LoadMap(mapPath, 60, 34);
 }
 
@@ -976,8 +1000,8 @@ void Game::updateTransition() {
             // Transition complete, reset transition state and proceed to next level
             isTransitioning = false;
             
-            // Clear all entities except UI
-            manager.clearAllExcept(Game::groupUI);
+            // First, clear transition text
+            transitionLabel->getComponent<UILabel>().SetLabelText("", "font2");
             
             // Reset game state variables for next level
             collectedClues = 0;
@@ -995,16 +1019,23 @@ void Game::updateTransition() {
             usedHealthPotionPositions.clear();
             usedEnemyPositions.clear();
             
-            // Load the next level
-            currentLevel++;
+            // Store current level before incrementing
+            int nextLevel = currentLevel + 1;
+            currentLevel = nextLevel;
             
-            // Clear transition text
-            transitionLabel->getComponent<UILabel>().SetLabelText("", "font2");
+            // Clear all entities including UI
+            manager.clear();
+            
+            // Make sure map is properly deallocated
+            if (map != nullptr) {
+                delete map;
+                map = nullptr;
+            }
             
             // Load the new level map
             loadLevel(currentLevel);
             
-            // Re-initialize entities for the new level
+            // Re-initialize all game entities and UI
             initEntities();
         }
     }

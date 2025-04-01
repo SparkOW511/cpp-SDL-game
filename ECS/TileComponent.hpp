@@ -12,10 +12,7 @@ class TileComponent : public Component {
 
         TileComponent() = default;
 
-        ~TileComponent() {
-            SDL_DestroyTexture(texture);
-        }
-
+        ~TileComponent() {}
 
         TileComponent(int srcX, int srcY, int xpos, int ypos, int tsize, int tscale, std::string id) {
             texture = Game::assets->GetTexture(id);

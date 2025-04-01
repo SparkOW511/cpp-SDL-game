@@ -18,6 +18,7 @@ class ColliderComponent : public Component {
 
     ColliderComponent(std::string t){
         tag = t;
+        tex = nullptr;
     }
 
     ColliderComponent(std::string t, int xpos, int ypos, int size) {
@@ -26,6 +27,14 @@ class ColliderComponent : public Component {
         collider.y = ypos;
         collider.w = size;
         collider.h = size;
+        tex = nullptr;
+    }
+    
+    ~ColliderComponent() {
+        if (tex != nullptr) {
+            SDL_DestroyTexture(tex);
+            tex = nullptr;
+        }
     }
 
     void init() override {

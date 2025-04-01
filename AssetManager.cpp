@@ -3,7 +3,23 @@
 
 AssetManager::AssetManager(Manager* man) : manager(man) {}
 
-AssetManager::~AssetManager() {}
+AssetManager::~AssetManager() {
+    // Clean up all textures
+    for (auto& texture : textures) {
+        if (texture.second != nullptr) {
+            SDL_DestroyTexture(texture.second);
+        }
+    }
+    textures.clear();
+    
+    // Clean up all fonts
+    for (auto& font : fonts) {
+        if (font.second != nullptr) {
+            TTF_CloseFont(font.second);
+        }
+    }
+    fonts.clear();
+}
 
 void AssetManager::CreateProjectile(Vector2D pos, Vector2D vel, int range, int speed, std::string id, SDL_RendererFlip bulletFlip) {
     auto& projectile(manager->addEntity());
