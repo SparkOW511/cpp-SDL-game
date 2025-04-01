@@ -9,6 +9,8 @@
 #include <set>
 #include "ECS/ECS.hpp"
 #include "Vector2D.hpp"
+#include "RandomPositionManager.hpp"
+#include "TransitionManager.hpp"
 
 class ColliderComponent;
 class AssetManager;
@@ -27,11 +29,6 @@ class Game {
         void clean();
         void restart();
         void initEntities();
-        Vector2D findRandomSpawnPosition();
-        Vector2D findRandomCluePosition();
-        Vector2D findRandomMagazinePosition();
-        Vector2D findRandomHealthPotionPosition();
-        Vector2D findRandomEnemyPosition();
         bool running() { return isRunning; }
         
         void showQuestion(Entity* clueEntity);
@@ -41,8 +38,6 @@ class Game {
         // Level management methods
         void loadLevel(int levelNum);
         void advanceToNextLevel();
-        void updateTransition();
-        void renderTransition();
         
         static SDL_Renderer *renderer;
         static SDL_Event event;
@@ -62,10 +57,6 @@ class Game {
         static Entity* feedbackLabel;
         static int currentLevel;
         static int maxLevels;
-        static bool isTransitioning;
-        static Uint32 transitionStartTime;
-        static int transitionState;
-        static std::string levelTransitionText;
         static bool showingExitInstructions; // Tracks if exit instructions have been shown
 
         enum groupLabels : std::size_t {
@@ -88,14 +79,10 @@ class Game {
         
         bool isAnswerCorrect = false;         // Was the last answer correct
         const Uint32 feedbackDuration = 1500; // How long to show feedback (1.5 seconds)
-        const Uint32 transitionDuration = 3000; // Duration of level transition in milliseconds
-        const Uint32 fadeInOutDuration = 1000; // Duration of fade in/out in milliseconds
         
-        // Track used spawn positions to prevent duplicates
-        std::set<Vector2D> usedCluePositions;
-        std::set<Vector2D> usedMagazinePositions;
-        std::set<Vector2D> usedHealthPotionPositions;
-        std::set<Vector2D> usedEnemyPositions;
+        // Managers
+        RandomPositionManager positionManager;
+        TransitionManager transitionManager;
         
         struct Question {
             std::string question;

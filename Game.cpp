@@ -55,10 +55,6 @@ Uint32 Game::feedbackStartTime = 0;
 Entity* Game::feedbackLabel = nullptr;
 int Game::currentLevel = 1;
 int Game::maxLevels = 2; // Set the maximum number of levels here
-bool Game::isTransitioning = false;
-Uint32 Game::transitionStartTime = 0;
-int Game::transitionState = 0; // 0: fade in, 1: show level text, 2: fade out
-std::string Game::levelTransitionText = "";
 bool Game::showingExitInstructions = false; // Initialize to false
 
 Game::Game()
@@ -112,24 +108,24 @@ void Game::initEntities() {
     
     // Create clues at random locations
     for (int i = 0; i < totalClues; i++) {
-        Vector2D cluePos = findRandomCluePosition();
+        Vector2D cluePos = positionManager.findRandomCluePosition(currentLevel);
         assets->CreateObject(cluePos.x, cluePos.y, "clue");
     }
     
     // Create magazine pickups at random locations using magazine-specific function
     for (int i = 0; i < totalMagazines; i++) {
-        Vector2D magazinePos = findRandomMagazinePosition();
+        Vector2D magazinePos = positionManager.findRandomMagazinePosition();
         assets->CreateObject(magazinePos.x, magazinePos.y, "magazine");
     }
     
     // Create health potion pickups at random locations using potion-specific function
     for (int i = 0; i < totalHealthPotions; i++) {
-        Vector2D potionPos = findRandomHealthPotionPosition();
+        Vector2D potionPos = positionManager.findRandomHealthPotionPosition();
         assets->CreateObject(potionPos.x, potionPos.y, "healthpotion");
     }
     
     // Find a random valid spawn position for the player
-    Vector2D playerSpawnPos = findRandomSpawnPosition();
+    Vector2D playerSpawnPos = positionManager.findRandomSpawnPosition(currentLevel);
     
     // Setup player entity with random position
     player->addComponent<TransformComponent>(playerSpawnPos.x, playerSpawnPos.y, 32, 32, 3);
@@ -145,7 +141,7 @@ void Game::initEntities() {
     for (int i = 0; i < numEnemies; i++) {
         Entity& enemy = manager.addEntity();
         
-        Vector2D enemyPos = findRandomEnemyPosition();
+        Vector2D enemyPos = positionManager.findRandomEnemyPosition();
         enemy.addComponent<TransformComponent>(enemyPos.x, enemyPos.y, 32, 32, 3);
         enemy.addComponent<SpriteComponent>("enemy", true);
         enemy.addComponent<ColliderComponent>("enemy");
@@ -216,6 +212,9 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
     assets->AddFont("font2", "./assets/MINECRAFT.TTF", 72);
 
+    // Initialize managers
+    transitionManager.init(this, &manager);
+
     loadLevel(currentLevel);
 
     // Initialize all game entities and objects
@@ -281,8 +280,44 @@ void Game::update()
     manager.refresh();
     
     // Handle transition if active
-    if (isTransitioning) {
-        updateTransition();
+    if (transitionManager.isTransitioning()) {
+        if (transitionManager.updateTransition()) {
+            // Transition is complete, proceed with level change
+            // Reset game state variables for next level
+            collectedClues = 0;
+            damageTimer = 1.0f;
+            objectCollisionDelay = 1.0f;
+            objectCollisionsEnabled = false;
+            questionActive = false;
+            pendingClueEntity = nullptr;
+            showFeedback = false;
+            showingExitInstructions = false; // Reset exit instructions flag
+            
+            // Reset position tracking
+            positionManager.resetPositions();
+            
+            // Store current level before incrementing
+            int nextLevel = currentLevel + 1;
+            currentLevel = nextLevel;
+            
+            // Clear all entities including UI
+            manager.clear();
+            
+            // Make sure map is properly deallocated
+            if (map != nullptr) {
+                delete map;
+                map = nullptr;
+            }
+            
+            // Load the new level map
+            loadLevel(currentLevel);
+            
+            // Re-initialize all game entities and UI
+            initEntities();
+            
+            // Reinitialize the transition manager after entities are created
+            transitionManager.init(this, &manager);
+        }
         return;
     }
     
@@ -538,8 +573,8 @@ void Game::render()
     SDL_RenderClear(renderer);
     
     // If transitioning, only render the transition screen
-    if (isTransitioning) {
-        renderTransition();
+    if (transitionManager.isTransitioning()) {
+        transitionManager.renderTransition();
         SDL_RenderPresent(renderer);
         return;
     }
@@ -621,11 +656,8 @@ void Game::restart() {
     // Set clue count correctly for level 1
     totalClues = 3; // Reset to default value, loadLevel will adjust if needed
     
-    // Clear tracking of used positions
-    usedCluePositions.clear();
-    usedMagazinePositions.clear();
-    usedHealthPotionPositions.clear();
-    usedEnemyPositions.clear();
+    // Reset position tracking
+    positionManager.resetPositions();
     
     // Clear all entities including UI
     manager.clear();
@@ -737,199 +769,6 @@ void Game::closeQuestion() {
     feedbackLabel->getComponent<UILabel>().SetLabelText("", "font2");
 }
 
-Vector2D Game::findRandomSpawnPosition() {
-    static std::mt19937 rng(std::time(nullptr));
-    
-    // On level 2, always spawn at bottom center of map
-    if (currentLevel == 2) {
-        return {30*64, 30*64}; // Bottom center of map for level 2
-    }
-    
-    // Random spawns for level 1
-    const std::vector<Vector2D> spawnPoints = {
-        {8*64, 6*64},
-        {12*64, 18*64},
-        {18*64, 5*64},
-        {26*64, 17*64},
-        {26*64, 28*64},
-        {28*64, 3*64},
-        {34*64, 11*64},
-        {39*64, 4*64},
-        {36*64, 19*64},
-        {53*64, 11*64},
-        {50*64, 20*64}
-    };
-    
-    int idx = rng() % spawnPoints.size();
-    return spawnPoints[idx];
-}
-
-Vector2D Game::findRandomCluePosition() {
-    static std::mt19937 rng(std::time(nullptr));
-    
-    std::vector<Vector2D> cluePoints;
-    
-    // Use different spawn positions based on the current level
-    if (currentLevel == 1) {
-        // Level 1 clue positions
-        cluePoints = {
-            {10*64, 3*64},
-            {8*64, 13*64},
-            {18*64, 7*64},
-            {17*64, 24*64},
-            {22*64, 17*64},
-            {32*64, 25*64}, // Fixed position that was 32*64, 35*64 (outside map bounds in level 1)
-            {46*64, 2*64},
-            {30*64, 6*64}
-        };
-    } else {
-        // Level 2 clue positions
-        cluePoints = {
-            {10*64, 3*64},
-            {8*64, 13*64},
-            {18*64, 7*64},
-            {17*64, 24*64},
-            {22*64, 17*64},
-            {32*64, 35*64},
-            {46*64, 2*64},
-            {30*64, 6*64}
-        };
-    }
-    
-    // Create a list of available positions (not used yet)
-    std::vector<Vector2D> availablePositions;
-    for (const auto& pos : cluePoints) {
-        if (usedCluePositions.find(pos) == usedCluePositions.end()) {
-            availablePositions.push_back(pos);
-        }
-    }
-    
-    // If all positions are used, return a fallback position
-    if (availablePositions.empty()) {
-        return {10*64, 3*64}; // Default fallback
-    }
-    
-    // Select a random available position
-    int idx = rng() % availablePositions.size();
-    Vector2D selectedPos = availablePositions[idx];
-    
-    // Mark position as used
-    usedCluePositions.insert(selectedPos);
-    
-    return selectedPos;
-}
-
-Vector2D Game::findRandomMagazinePosition() {
-    static std::mt19937 rng(std::time(nullptr));
-    
-    const std::vector<Vector2D> magazinePoints = {
-        {8*64, 3*64},
-        {19*64, 2*64},
-        {34*64, 5*64},
-        {43*64, 10*64},
-        {14*64, 12*64},
-        {27*64, 12*64},
-        {35*64, 17*64},
-        {15*64, 21*64},
-        {30*64, 28*64}
-    };
-    
-    // Create a list of available positions (not used yet)
-    std::vector<Vector2D> availablePositions;
-    for (const auto& pos : magazinePoints) {
-        if (usedMagazinePositions.find(pos) == usedMagazinePositions.end()) {
-            availablePositions.push_back(pos);
-        }
-    }
-    
-    // If all positions are used, return a fallback position
-    if (availablePositions.empty()) {
-        return {8*64, 3*64}; // Default fallback
-    }
-    
-    // Select a random available position
-    int idx = rng() % availablePositions.size();
-    Vector2D selectedPos = availablePositions[idx];
-    
-    // Mark position as used
-    usedMagazinePositions.insert(selectedPos);
-    
-    return selectedPos;
-}
-
-Vector2D Game::findRandomHealthPotionPosition() {
-    static std::mt19937 rng(std::time(nullptr));
-    
-    const std::vector<Vector2D> potionPoints = {
-        {9*64, 9*64},
-        {16*64, 16*64},
-        {23*64, 5*64},
-        {28*64, 8*64},
-        {39*64, 9*64},
-        {28*64, 21*64},
-        {21*64, 26*64},
-        {52*64, 15*64}
-    };
-    
-    // Create a list of available positions (not used yet)
-    std::vector<Vector2D> availablePositions;
-    for (const auto& pos : potionPoints) {
-        if (usedHealthPotionPositions.find(pos) == usedHealthPotionPositions.end()) {
-            availablePositions.push_back(pos);
-        }
-    }
-    
-    // If all positions are used, return a fallback position
-    if (availablePositions.empty()) {
-        return {9*64, 9*64}; // Default fallback
-    }
-    
-    // Select a random available position
-    int idx = rng() % availablePositions.size();
-    Vector2D selectedPos = availablePositions[idx];
-    
-    // Mark position as used
-    usedHealthPotionPositions.insert(selectedPos);
-    
-    return selectedPos;
-}
-
-Vector2D Game::findRandomEnemyPosition() {
-    static std::mt19937 rng(std::time(nullptr));
-    
-    const std::vector<Vector2D> enemyPoints = {
-        {12*64, 4*64},
-        {10*64, 13*64},
-        {17*64, 22*64},
-        {22*64, 19*64},
-        {34*64, 23*64},
-        {45*64, 3*64},
-        {49*64, 13*64}
-    };
-    
-    // Create a list of available positions (not used yet)
-    std::vector<Vector2D> availablePositions;
-    for (const auto& pos : enemyPoints) {
-        if (usedEnemyPositions.find(pos) == usedEnemyPositions.end()) {
-            availablePositions.push_back(pos);
-        }
-    }
-    
-    // If all positions are used, return a fallback position
-    if (availablePositions.empty()) {
-        return {12*64, 4*64}; // Default fallback
-    }
-    
-    // Select a random available position
-    int idx = rng() % availablePositions.size();
-    Vector2D selectedPos = availablePositions[idx];
-    
-    // Mark position as used
-    usedEnemyPositions.insert(selectedPos);
-    
-    return selectedPos;
-}
-
 void Game::loadLevel(int levelNum) {
     // Make sure to clean up the previous map
     if (map != nullptr) {
@@ -959,121 +798,7 @@ void Game::loadLevel(int levelNum) {
 }
 
 void Game::advanceToNextLevel() {
-    // Start transition sequence
-    isTransitioning = true;
-    transitionStartTime = SDL_GetTicks();
-    transitionState = 0; // Start with fade in
-    
-    // Set transition text to show between levels
-    std::stringstream levelMessage;
-    levelMessage << "Level " << (currentLevel + 1);
-    levelTransitionText = levelMessage.str();
-    
-    // Center the transition text
-    transitionLabel->getComponent<UILabel>().SetLabelText(levelTransitionText, "font2", white);
-    int textWidth = transitionLabel->getComponent<UILabel>().GetWidth();
-    int textHeight = transitionLabel->getComponent<UILabel>().GetHeight();
-    int xPos = (1920 - textWidth) / 2;
-    int yPos = (1080 - textHeight) / 2;
-    transitionLabel->getComponent<UILabel>().SetPosition(xPos, yPos);
-}
-
-void Game::updateTransition() {
-    Uint32 currentTime = SDL_GetTicks();
-    Uint32 elapsedTime = currentTime - transitionStartTime;
-    
-    // Update transition state based on elapsed time
-    if (transitionState == 0) { // Fade in
-        if (elapsedTime >= fadeInOutDuration) {
-            transitionState = 1; // Move to showing level text
-            transitionStartTime = currentTime;
-        }
-    }
-    else if (transitionState == 1) { // Show level text
-        if (elapsedTime >= transitionDuration - (2 * fadeInOutDuration)) {
-            transitionState = 2; // Move to fade out
-            transitionStartTime = currentTime;
-        }
-    }
-    else if (transitionState == 2) { // Fade out
-        if (elapsedTime >= fadeInOutDuration) {
-            // Transition complete, reset transition state and proceed to next level
-            isTransitioning = false;
-            
-            // First, clear transition text
-            transitionLabel->getComponent<UILabel>().SetLabelText("", "font2");
-            
-            // Reset game state variables for next level
-            collectedClues = 0;
-            damageTimer = 1.0f;
-            objectCollisionDelay = 1.0f;
-            objectCollisionsEnabled = false;
-            questionActive = false;
-            pendingClueEntity = nullptr;
-            showFeedback = false;
-            showingExitInstructions = false; // Reset exit instructions flag
-            
-            // Clear tracking of used positions
-            usedCluePositions.clear();
-            usedMagazinePositions.clear();
-            usedHealthPotionPositions.clear();
-            usedEnemyPositions.clear();
-            
-            // Store current level before incrementing
-            int nextLevel = currentLevel + 1;
-            currentLevel = nextLevel;
-            
-            // Clear all entities including UI
-            manager.clear();
-            
-            // Make sure map is properly deallocated
-            if (map != nullptr) {
-                delete map;
-                map = nullptr;
-            }
-            
-            // Load the new level map
-            loadLevel(currentLevel);
-            
-            // Re-initialize all game entities and UI
-            initEntities();
-        }
-    }
-}
-
-void Game::renderTransition() {
-    Uint32 currentTime = SDL_GetTicks();
-    Uint32 elapsedTime = currentTime - transitionStartTime;
-    
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    
-    // Calculate alpha based on transition state
-    Uint8 alpha = 0;
-    
-    if (transitionState == 0) { // Fade in
-        float progress = static_cast<float>(elapsedTime) / fadeInOutDuration;
-        alpha = static_cast<Uint8>(255 * progress);
-    }
-    else if (transitionState == 1) { // Show level text
-        alpha = 255; // Fully opaque
-    }
-    else if (transitionState == 2) { // Fade out
-        float progress = 1.0f - (static_cast<float>(elapsedTime) / fadeInOutDuration);
-        alpha = static_cast<Uint8>(255 * progress);
-    }
-    
-    // Fill screen with black at calculated alpha
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
-    SDL_Rect fullScreen = {0, 0, 1920, 1080};
-    SDL_RenderFillRect(renderer, &fullScreen);
-    
-    // Show level text if in state 1 or 2
-    if (transitionState >= 1 && transitionLabel != nullptr) {
-        transitionLabel->draw();
-    }
-    
-    // Reset renderer settings
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+    // Start transition sequence using the transition manager
+    transitionManager.startTransition(currentLevel, currentLevel + 1);
 }
 
