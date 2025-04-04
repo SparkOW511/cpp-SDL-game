@@ -44,9 +44,9 @@ class Game {
         static bool isRunning;
         static SDL_Rect camera;
         static AssetManager* assets;
-        static int totalClues;
-        static int totalMagazines;
-        static int totalHealthPotions;
+        static int totalClues;         // Now set per level in loadLevel method
+        static int totalMagazines;     // Now set per level in loadLevel method
+        static int totalHealthPotions; // Now set per level in loadLevel method
         static int collectedClues;
         static bool gameOver;
         static bool playerWon;

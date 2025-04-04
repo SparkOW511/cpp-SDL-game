@@ -136,8 +136,9 @@ void Game::initEntities() {
     player->addComponent<KeyboardController>();
     player->addGroup(Game::groupPlayers);
 
-    // Create multiple enemies at random positions
-    const int numEnemies = 3; // Number of enemies to spawn
+    // Create multiple enemies at random positions - number based on level
+    int numEnemies = (currentLevel == 1) ? 3 : 5; // More enemies in level 2
+    
     for (int i = 0; i < numEnemies; i++) {
         Entity& enemy = manager.addEntity();
         
@@ -781,6 +782,17 @@ void Game::loadLevel(int levelNum) {
     collectedClues = 0;
     showingExitInstructions = false; // Reset exit instructions flag for new level
     
+    // Set level-specific quantities
+    if (currentLevel == 1) {
+        totalClues = 3;
+        totalMagazines = 3;
+        totalHealthPotions = 2;
+    } else if (currentLevel == 2) {
+        totalClues = 5;
+        totalMagazines = 4;  
+        totalHealthPotions = 3;
+    }
+    
     // Create appropriate map based on level number
     std::string terrainTexture = "terrainlvl" + std::to_string(levelNum);
     std::string mapPath = "./assets/lvl" + std::to_string(levelNum) + "/Level" + std::to_string(levelNum) + "Map.map";
@@ -801,4 +813,3 @@ void Game::advanceToNextLevel() {
     // Start transition sequence using the transition manager
     transitionManager.startTransition(currentLevel, currentLevel + 1);
 }
-
