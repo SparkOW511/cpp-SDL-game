@@ -16,6 +16,22 @@ class ColliderComponent;
 class AssetManager;
 class Map;
 
+// Game state enumeration 
+enum GameState {
+    STATE_MAIN_MENU,
+    STATE_GAME,
+    STATE_PAUSE,
+    STATE_GAME_OVER
+};
+
+// Menu item enumeration
+enum MenuItem {
+    MENU_NEW_GAME,
+    MENU_LOAD_GAME,
+    MENU_EXIT,
+    MENU_ITEMS_COUNT
+};
+
 class Game {
 
     public:
@@ -34,6 +50,13 @@ class Game {
         void showQuestion(Entity* clueEntity);
         void checkAnswer(int selectedAnswer);
         void closeQuestion();
+
+        // Main menu methods
+        void initMainMenu();
+        void updateMainMenu();
+        void renderMainMenu();
+        void startGame();
+        void loadGame(); // Not implemented functionality
 
         // Level management methods
         void loadLevel(int levelNum);
@@ -58,6 +81,7 @@ class Game {
         static int currentLevel;
         static int maxLevels;
         static bool showingExitInstructions; // Tracks if exit instructions have been shown
+        static GameState gameState;          // Current game state
 
         enum groupLabels : std::size_t {
             groupMap,
@@ -76,9 +100,21 @@ class Game {
         SDL_Color white = {255, 255, 255, 255};
         SDL_Color green = {0, 255, 0, 255};   // Color for correct answers
         SDL_Color red = {255, 0, 0, 255};     // Color for incorrect answers
+        SDL_Color yellow = {255, 255, 0, 255}; // Color for selected menu items
         
         bool isAnswerCorrect = false;         // Was the last answer correct
         const Uint32 feedbackDuration = 1500; // How long to show feedback (1.5 seconds)
+        
+        // Main menu entities
+        Entity* menuTitle = nullptr;
+        Entity* menuNewGameButton = nullptr;
+        Entity* menuLoadGameButton = nullptr;  
+        Entity* menuExitButton = nullptr;
+        Entity* menuBackground = nullptr;
+        
+        // Menu state tracking
+        int selectedMenuItem = MENU_NEW_GAME; // Default to New Game
+        bool menuItemSelected = false;
         
         // Managers
         RandomPositionManager positionManager;
