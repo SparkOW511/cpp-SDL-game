@@ -115,6 +115,7 @@ class Game {
         // Menu state tracking
         int selectedMenuItem = MENU_NEW_GAME; // Default to New Game
         bool menuItemSelected = false;
+        bool menuHighlightActive = false;     // Flag to track if menu highlights should be active
         
         // Managers
         RandomPositionManager positionManager;

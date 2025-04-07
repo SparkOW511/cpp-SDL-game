@@ -27,6 +27,9 @@ public:
     // Get the current transition state
     bool isTransitioning() const { return mIsTransitioning; }
     
+    // UI Entity for transition text - public for direct access
+    Entity* mTransitionLabel;
+    
 private:
     // Transition states and timing
     bool mIsTransitioning;
@@ -46,7 +49,4 @@ private:
     
     // Reference to the entity manager
     Manager* mManager;
-    
-    // UI Entity for transition text
-    Entity* mTransitionLabel;
 }; 

@@ -18,6 +18,7 @@ class UILabel : public Component {
             onClick = nullptr;
             hoverColor = {255, 255, 0, 255}; // Default hover color (yellow)
             isHovered = false;
+            originalColor = color; // Store original color
             SetLabelText(labelText, labelFont);
         }
         
@@ -62,6 +63,7 @@ class UILabel : public Component {
             }
             
             textColor = color;
+            originalColor = color; // Update original color when explicitly setting color
             labelText = text;
             labelFont = font;
             
@@ -139,7 +141,6 @@ class UILabel : public Component {
                 if (wasHovered != isHovered) {
                     if (isHovered) {
                         // Save original color and set hover color
-                        originalColor = textColor;
                         SetTextColor(hoverColor);
                     } else {
                         // Restore original color
@@ -156,6 +157,17 @@ class UILabel : public Component {
             }
             
             return false;
+        }
+        
+        // Explicitly reset hover state and restore original color
+        void ResetHoverState() {
+            isHovered = false;
+            SetTextColor(originalColor);
+        }
+        
+        // Check if element is currently hovered
+        bool IsHovered() const {
+            return isHovered;
         }
 
         void draw() override{

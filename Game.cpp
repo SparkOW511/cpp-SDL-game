@@ -64,6 +64,7 @@ Entity* menuNewGameButton = nullptr;
 Entity* menuLoadGameButton = nullptr;
 Entity* menuExitButton = nullptr;
 int selectedMenuItem = MENU_NEW_GAME;
+bool menuHighlightActive = false;
 
 Game::Game()
 {
@@ -202,7 +203,7 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     if(assets != nullptr) {
         delete assets;
     }
-    
+
     assets = new AssetManager(&manager);
 
     // Load textures
@@ -226,6 +227,14 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     // Initialize random number generator
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
     
+    // Initialize transition manager globally
+    transitionManager.init(this, &manager);
+    
+    // Create transition label for transitions between levels
+    transitionLabel = &manager.addEntity();
+    transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
+    transitionManager.mTransitionLabel = transitionLabel;
+    
     // Set initial game state
     gameState = STATE_MAIN_MENU;
     
@@ -234,10 +243,7 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         initMainMenu();
     } else {
         // Initialize the game entities and map for gameplay
-        initEntities();
-        
-        // Initialize managers
-        transitionManager.init(this, &manager);
+    initEntities();
         
         // Load first level
         loadLevel(currentLevel);
@@ -257,10 +263,14 @@ void Game::handleEvents()
                 switch(event.key.keysym.sym) {
                     case SDLK_UP:
                         selectedMenuItem = (selectedMenuItem - 1 + MENU_ITEMS_COUNT) % MENU_ITEMS_COUNT;
+                        menuHighlightActive = true; // Activate highlighting when using keyboard
+                        // Force update menu items and reset all hover states
                         updateMainMenu();
                         break;
                     case SDLK_DOWN:
                         selectedMenuItem = (selectedMenuItem + 1) % MENU_ITEMS_COUNT;
+                        menuHighlightActive = true; // Activate highlighting when using keyboard
+                        // Force update menu items and reset all hover states
                         updateMainMenu();
                         break;
                     case SDLK_RETURN:
@@ -338,9 +348,64 @@ void Game::handleEvents()
             
         // Handle mouse events for clickable UI elements
         case SDL_MOUSEMOTION:
+            if (gameState == STATE_MAIN_MENU) {
+                // First force reset hover states on all menu items before handling new hover
+                bool anyHovered = false;
+                int mouseX = event.motion.x;
+                int mouseY = event.motion.y;
+                
+                // Handle individual hover events
+                if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
+                    bool isOver = menuNewGameButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedMenuItem = MENU_NEW_GAME;
+                        menuHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                if (menuLoadGameButton && menuLoadGameButton->hasComponent<UILabel>()) {
+                    bool isOver = menuLoadGameButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedMenuItem = MENU_LOAD_GAME;
+                        menuHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
+                    bool isOver = menuExitButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedMenuItem = MENU_EXIT;
+                        menuHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                // If no items are being hovered and we previously had highlights active
+                if (!anyHovered && menuHighlightActive) {
+                    menuHighlightActive = false; // Disable highlights when not hovering
+                    updateMainMenu(); // Update to show no highlights
+                } else if (anyHovered) {
+                    // Process hover effects
+                    if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
+                        menuNewGameButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                    
+                    if (menuLoadGameButton && menuLoadGameButton->hasComponent<UILabel>()) {
+                        menuLoadGameButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                    
+                    if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
+                        menuExitButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                }
+            }
+            break;
+            
         case SDL_MOUSEBUTTONDOWN:
             if (gameState == STATE_MAIN_MENU) {
-                // Check menu buttons
+                // Handle mouse clicks for menu buttons
                 if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
                     menuNewGameButton->getComponent<UILabel>().HandleEvent(event);
                 }
@@ -351,25 +416,6 @@ void Game::handleEvents()
                 
                 if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
                     menuExitButton->getComponent<UILabel>().HandleEvent(event);
-                }
-                
-                // Update selected menu item based on mouse position
-                if (event.type == SDL_MOUSEMOTION) {
-                    int mouseX = event.motion.x;
-                    int mouseY = event.motion.y;
-                    
-                    if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>() && 
-                        menuNewGameButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY)) {
-                        selectedMenuItem = MENU_NEW_GAME;
-                    }
-                    else if (menuLoadGameButton && menuLoadGameButton->hasComponent<UILabel>() && 
-                             menuLoadGameButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY)) {
-                        selectedMenuItem = MENU_LOAD_GAME;
-                    }
-                    else if (menuExitButton && menuExitButton->hasComponent<UILabel>() && 
-                             menuExitButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY)) {
-                        selectedMenuItem = MENU_EXIT;
-                    }
                 }
             }
             break;
@@ -392,10 +438,10 @@ void Game::update()
             break;
             
         case STATE_GAME:
-            // Always refresh entity manager for proper lifecycle management
-            manager.refresh();
-            
-            // Handle transition if active
+    // Always refresh entity manager for proper lifecycle management
+    manager.refresh();
+    
+    // Handle transition if active
             if (transitionManager.isTransitioning()) {
                 if (transitionManager.updateTransition()) {
                     // Transition is complete, proceed with level change
@@ -431,231 +477,203 @@ void Game::update()
                     // Re-initialize all game entities and UI
                     initEntities();
                     
+                    // Recreate transition label after entity initialization
+                    transitionLabel = &manager.addEntity();
+                    transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
+                    
                     // Reinitialize the transition manager after entities are created
+                    transitionManager.mTransitionLabel = transitionLabel;
                     transitionManager.init(this, &manager);
                 }
-                return;
+        return;
+    }
+    
+    // Handle animations for all entities regardless of game state
+    for(auto& p : *players) {
+        if (p->hasComponent<SpriteComponent>()) {
+            p->getComponent<SpriteComponent>().update();
+        }
+    }
+    
+    for(auto& e : *enemies) {
+        if (e->hasComponent<SpriteComponent>()) {
+            e->getComponent<SpriteComponent>().update();
+        }
+        // Continue enemy movement animations if not in question mode
+        if (!questionActive && !gameOver && e->hasComponent<EnemyAIComponent>()) {
+            e->getComponent<EnemyAIComponent>().update();
+        } else if ((questionActive || gameOver) && e->hasComponent<SpriteComponent>()) {
+            // Ensure enemies stay in idle animation during question mode or game over
+            e->getComponent<SpriteComponent>().Play("Idle");
+        }
+    }
+    
+    for(auto& p : *projectiles) {
+        if (p->hasComponent<SpriteComponent>()) {
+            p->getComponent<SpriteComponent>().update();
+        }
+    }
+    
+    for(auto& o : *objects) {
+        if(o->hasComponent<SpriteComponent>()) {
+            o->getComponent<SpriteComponent>().update();
+        }
+    }
+    
+    // Only update player-related UI if the player exists and game is not over
+    if (player != nullptr && player->isActive() && !gameOver) {
+        // Keep game state updated for UI elements
+        int health = player->getComponent<HealthComponent>().health;
+        std::stringstream healthSS;
+        healthSS << "Health: " << health;
+        healthbar->getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
+        
+        int ammo = player->getComponent<AmmoComponent>().currentAmmo;
+        std::stringstream ammoSS;
+        ammoSS << "Ammo: " << ammo;
+        ammobar->getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
+
+        std::stringstream clueSS;
+        clueSS << "Clues: " << collectedClues << "/" << totalClues;
+        clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
+    }
+
+    // Check if feedback timer has expired
+    if (showFeedback) {
+        // For regular feedback from questions
+        if (!showingExitInstructions && (currentTime - feedbackStartTime > 1500)) {
+            closeQuestion();
+        } 
+        // For exit instructions, keep visible until player reaches exit
+        // Don't hide the "head north" message
+    }
+
+    // If game is in question mode or game over, skip gameplay logic but continue animations
+    if (questionActive || gameOver) {
+        // Ensure player doesn't move during questions if player exists
+        if (questionActive && player != nullptr && player->isActive() && 
+            player->hasComponent<TransformComponent>()) {
+            player->getComponent<TransformComponent>().velocity.x = 0;
+            player->getComponent<TransformComponent>().velocity.y = 0;
+        }
+        return;
+    }
+    
+    // Continue with regular game update logic - only if player exists
+    if (player != nullptr && player->isActive()) {
+        Vector2D playerPos = player->getComponent<TransformComponent>().position;
+        
+        manager.update();
+        
+        SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
+        
+        damageTimer -= 1.0f/60.0f;
+        
+        if (!objectCollisionsEnabled) {
+            objectCollisionDelay -= 1.0f/60.0f;
+            if (objectCollisionDelay <= 0.0f) {
+                objectCollisionsEnabled = true;
             }
-            
-            // Handle animations for all entities regardless of game state
-            for(auto& p : *players) {
-                if (p->hasComponent<SpriteComponent>()) {
-                    p->getComponent<SpriteComponent>().update();
+        }
+
+        // Handle object collisions
+        if (objectCollisionsEnabled) {
+            for (auto& o : *objects) {
+                if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
+                                o->getComponent<ColliderComponent>().collider)) {
+                    if (o->getComponent<ColliderComponent>().tag == "clue") {
+                        showQuestion(o);
+                    }
+                    else if (o->getComponent<ColliderComponent>().tag == "magazine") {
+                        player->getComponent<AmmoComponent>().addAmmo();
+                        o->destroy();
+                    }
+                    else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
+                        player->getComponent<HealthComponent>().heal(20);
+                        o->destroy();
+                    }
                 }
             }
+        }
+
+        // Player collision with terrain
+        for(auto& c : *colliders) {
+            SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
             
-            for(auto& e : *enemies) {
-                if (e->hasComponent<SpriteComponent>()) {
-                    e->getComponent<SpriteComponent>().update();
-                }
-                // Continue enemy movement animations if not in question mode
-                if (!questionActive && !gameOver && e->hasComponent<EnemyAIComponent>()) {
-                    e->getComponent<EnemyAIComponent>().update();
-                } else if ((questionActive || gameOver) && e->hasComponent<SpriteComponent>()) {
-                    // Ensure enemies stay in idle animation during question mode or game over
-                    e->getComponent<SpriteComponent>().Play("Idle");
-                }
+            // Check if collision happened
+            if(Collision::AABB(cCol, playerCol)) {
+                // Simply restore player to previous position before movement
+                player->getComponent<TransformComponent>().position = playerPos;
+                // Update collider position
+                player->getComponent<ColliderComponent>().update();
             }
-            
+        }
+
+        // Enemy collision with projectiles and player
+        for(auto& e : *enemies) {
+            // Projectile collision
             for(auto& p : *projectiles) {
-                if (p->hasComponent<SpriteComponent>()) {
-                    p->getComponent<SpriteComponent>().update();
+                if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
+                                p->getComponent<ColliderComponent>().collider)) {
+                    e->getComponent<HealthComponent>().takeDamage(25);
+                    p->destroy();
                 }
+            }
+
+            // Player collision with damage cooldown
+            SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
+            if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
+                player->getComponent<HealthComponent>().takeDamage(5);
+                damageTimer = damageCooldown;
+            }
+
+            // Destroy dead enemies
+            if(e->getComponent<HealthComponent>().health <= 0) {
+                e->destroy();
+            }
+        }
+
+        // Center camera on player
+        camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
+        camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
+
+        // Camera bounds
+        int worldWidth = 60 * 32 * 2;
+        int worldHeight = 34 * 32 * 2;
+        if(camera.x < 0) camera.x = 0;
+        if(camera.y < 0) camera.y = 0;
+        if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
+        if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
+        
+        // Check win condition
+        if (collectedClues >= totalClues) {
+            // All clues collected, but still require player to go north
+            if (!showingExitInstructions) {
+                // Show instructions to player only once
+                feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
+                
+                // Position the feedback at the bottom of the screen
+                int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+                int xPos = (1920 - feedbackWidth) / 2;
+                feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
+                
+                // Show feedback
+                showFeedback = true;
+                feedbackStartTime = SDL_GetTicks();
+                showingExitInstructions = true;
             }
             
-            for(auto& o : *objects) {
-                if(o->hasComponent<SpriteComponent>()) {
-                    o->getComponent<SpriteComponent>().update();
-                }
-            }
-            
-            // Only update player-related UI if the player exists and game is not over
-            if (player != nullptr && player->isActive() && !gameOver) {
-                // Keep game state updated for UI elements
-                int health = player->getComponent<HealthComponent>().health;
-                std::stringstream healthSS;
-                healthSS << "Health: " << health;
-                healthbar->getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
-                
-                int ammo = player->getComponent<AmmoComponent>().currentAmmo;
-                std::stringstream ammoSS;
-                ammoSS << "Ammo: " << ammo;
-                ammobar->getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
-
-                std::stringstream clueSS;
-                clueSS << "Clues: " << collectedClues << "/" << totalClues;
-                clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
-            }
-
-            // Check if feedback timer has expired
-            if (showFeedback) {
-                // For regular feedback from questions
-                if (!showingExitInstructions && (currentTime - feedbackStartTime > 1500)) {
-                    closeQuestion();
-                } 
-                // For exit instructions, keep visible until player reaches exit
-                // Don't hide the "head north" message
-            }
-
-            // If game is in question mode or game over, skip gameplay logic but continue animations
-            if (questionActive || gameOver) {
-                // Ensure player doesn't move during questions if player exists
-                if (questionActive && player != nullptr && player->isActive() && 
-                    player->hasComponent<TransformComponent>()) {
-                    player->getComponent<TransformComponent>().velocity.x = 0;
-                    player->getComponent<TransformComponent>().velocity.y = 0;
-                }
-                return;
-            }
-            
-            // Continue with regular game update logic - only if player exists
-            if (player != nullptr && player->isActive()) {
-                Vector2D playerPos = player->getComponent<TransformComponent>().position;
-                
-                manager.update();
-                
-                SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
-                
-                damageTimer -= 1.0f/60.0f;
-                
-                if (!objectCollisionsEnabled) {
-                    objectCollisionDelay -= 1.0f/60.0f;
-                    if (objectCollisionDelay <= 0.0f) {
-                        objectCollisionsEnabled = true;
-                    }
-                }
-
-                // Handle object collisions
-                if (objectCollisionsEnabled) {
-                    for (auto& o : *objects) {
-                        if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
-                                        o->getComponent<ColliderComponent>().collider)) {
-                            if (o->getComponent<ColliderComponent>().tag == "clue") {
-                                showQuestion(o);
-                            }
-                            else if (o->getComponent<ColliderComponent>().tag == "magazine") {
-                                player->getComponent<AmmoComponent>().addAmmo();
-                                o->destroy();
-                            }
-                            else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
-                                player->getComponent<HealthComponent>().heal(20);
-                                o->destroy();
-                            }
-                        }
-                    }
-                }
-
-                // Player collision with terrain
-                for(auto& c : *colliders) {
-                    SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+            // Check if player has gone far enough north
+            if (player->getComponent<TransformComponent>().position.y < 100) {
+                // Player has gone north enough, proceed to next level
+                if (currentLevel < maxLevels) {
+                    // Advance to next level
+                    advanceToNextLevel();
+                } else {
+                    // Show final win message if all levels completed
+                    gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
                     
-                    // Check if collision happened
-                    if(Collision::AABB(cCol, playerCol)) {
-                        // Simply restore player to previous position before movement
-                        player->getComponent<TransformComponent>().position = playerPos;
-                        // Update collider position
-                        player->getComponent<ColliderComponent>().update();
-                    }
-                }
-
-                // Enemy collision with projectiles and player
-                for(auto& e : *enemies) {
-                    // Projectile collision
-                    for(auto& p : *projectiles) {
-                        if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
-                                        p->getComponent<ColliderComponent>().collider)) {
-                            e->getComponent<HealthComponent>().takeDamage(25);
-                            p->destroy();
-                        }
-                    }
-
-                    // Player collision with damage cooldown
-                    SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
-                    if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
-                        player->getComponent<HealthComponent>().takeDamage(5);
-                        damageTimer = damageCooldown;
-                    }
-
-                    // Destroy dead enemies
-                    if(e->getComponent<HealthComponent>().health <= 0) {
-                        e->destroy();
-                    }
-                }
-
-                // Center camera on player
-                camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
-                camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
-
-                // Camera bounds
-                int worldWidth = 60 * 32 * 2;
-                int worldHeight = 34 * 32 * 2;
-                if(camera.x < 0) camera.x = 0;
-                if(camera.y < 0) camera.y = 0;
-                if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
-                if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
-                
-                // Check win condition
-                if (collectedClues >= totalClues) {
-                    // All clues collected, but still require player to go north
-                    if (!showingExitInstructions) {
-                        // Show instructions to player only once
-                        feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
-                        
-                        // Position the feedback at the bottom of the screen
-                        int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
-                        int xPos = (1920 - feedbackWidth) / 2;
-                        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
-                        
-                        // Show feedback
-                        showFeedback = true;
-                        feedbackStartTime = SDL_GetTicks();
-                        showingExitInstructions = true;
-                    }
-                    
-                    // Check if player has gone far enough north
-                    if (player->getComponent<TransformComponent>().position.y < 100) {
-                        // Player has gone north enough, proceed to next level
-                        if (currentLevel < maxLevels) {
-                            // Advance to next level
-                            advanceToNextLevel();
-                        } else {
-                            // Show final win message if all levels completed
-                            gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
-                            
-                            // Center the win text
-                            int textWidth = gameover->getComponent<UILabel>().GetWidth();
-                            int textHeight = gameover->getComponent<UILabel>().GetHeight();
-                            
-                            int xPos = (1920 - textWidth) / 2;
-                            int yPos = (1080 - textHeight) / 2;
-                            
-                            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-                            
-                            // Hide UI elements except game over message
-                            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-                            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-                            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-                            
-                            // Reset all enemy animations to idle
-                            for(auto& e : *enemies) {
-                                if(e->hasComponent<SpriteComponent>()) {
-                                    e->getComponent<SpriteComponent>().Play("Idle");
-                                }
-                            }
-                            
-                            player->destroy();
-                            gameOver = true;
-                            playerWon = true;
-                        }
-                    }
-                }
-                
-                // Check player death
-                if(player->getComponent<HealthComponent>().health <= 0) {
-                    // Show game over message
-                    gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
-                    
-                    // Center the text horizontally and vertically on 1920x1080 resolution
+                    // Center the win text
                     int textWidth = gameover->getComponent<UILabel>().GetWidth();
                     int textHeight = gameover->getComponent<UILabel>().GetHeight();
                     
@@ -676,11 +694,44 @@ void Game::update()
                         }
                     }
                     
-                    // Set game over state before destroying player 
-                    gameOver = true;
-                    playerWon = false;
                     player->destroy();
+                    gameOver = true;
+                    playerWon = true;
                 }
+            }
+        }
+        
+        // Check player death
+        if(player->getComponent<HealthComponent>().health <= 0) {
+            // Show game over message
+            gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
+            
+            // Center the text horizontally and vertically on 1920x1080 resolution
+            int textWidth = gameover->getComponent<UILabel>().GetWidth();
+            int textHeight = gameover->getComponent<UILabel>().GetHeight();
+            
+            int xPos = (1920 - textWidth) / 2;
+            int yPos = (1080 - textHeight) / 2;
+            
+            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+            
+            // Hide UI elements except game over message
+            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+            
+            // Reset all enemy animations to idle
+            for(auto& e : *enemies) {
+                if(e->hasComponent<SpriteComponent>()) {
+                    e->getComponent<SpriteComponent>().Play("Idle");
+                }
+            }
+            
+            // Set game over state before destroying player 
+            gameOver = true;
+            playerWon = false;
+            player->destroy();
+        }
             }
             break;
             
@@ -698,65 +749,65 @@ void Game::render()
             break;
             
         case STATE_GAME:
-            SDL_RenderClear(renderer);
-            
-            // If transitioning, only render the transition screen
+    SDL_RenderClear(renderer);
+    
+    // If transitioning, only render the transition screen
             if (transitionManager.isTransitioning()) {
                 transitionManager.renderTransition();
-                SDL_RenderPresent(renderer);
-                return;
-            }
-            
-            // Always render game elements
-            for(auto& t : *tiles) t->draw();
-            for(auto& p : *players) p->draw();
-            for(auto& e : *enemies) e->draw();
-            for(auto& o : *objects) o->draw();
-            for(auto& p : *projectiles) p->draw();
-            
-            // Always render UI elements
-            healthbar->draw();
-            ammobar->draw();
-            clueCounter->draw();
-            gameover->draw();
-            
-            // Draw feedback if active (for both question feedback and exit instructions)
-            if (showFeedback && feedbackLabel != nullptr) {
-                // Create special background for feedback only for regular feedback, not exit instructions
-                if (!showingExitInstructions) {
-                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
-                    SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
-                    SDL_RenderFillRect(renderer, &feedbackBg);
-                }
-                
-                // Draw the feedback text
-                feedbackLabel->draw();
-                
-                // Reset draw color
-                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            }
-            
-            // Render question UI on top if active
-            if (questionActive) {
-                // Create a semi-transparent background for the question
-                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200); // Semi-transparent black
-                SDL_Rect questionBg = {1920/6, 250, 1920*2/3, 350}; // Wider and taller background
-                SDL_RenderFillRect(renderer, &questionBg);
-                
-                // Draw question elements
-                questionLabel->draw();
-                answer1Label->draw();
-                answer2Label->draw();
-                answer3Label->draw();
-                answer4Label->draw();
-                
-                // Reset draw color
-                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-            }
+        SDL_RenderPresent(renderer);
+        return;
+    }
+    
+    // Always render game elements
+    for(auto& t : *tiles) t->draw();
+    for(auto& p : *players) p->draw();
+    for(auto& e : *enemies) e->draw();
+    for(auto& o : *objects) o->draw();
+    for(auto& p : *projectiles) p->draw();
+    
+    // Always render UI elements
+    healthbar->draw();
+    ammobar->draw();
+    clueCounter->draw();
+    gameover->draw();
+    
+    // Draw feedback if active (for both question feedback and exit instructions)
+    if (showFeedback && feedbackLabel != nullptr) {
+        // Create special background for feedback only for regular feedback, not exit instructions
+        if (!showingExitInstructions) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
+            SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
+            SDL_RenderFillRect(renderer, &feedbackBg);
+        }
+        
+        // Draw the feedback text
+        feedbackLabel->draw();
+        
+        // Reset draw color
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
+    
+    // Render question UI on top if active
+    if (questionActive) {
+        // Create a semi-transparent background for the question
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200); // Semi-transparent black
+        SDL_Rect questionBg = {1920/6, 250, 1920*2/3, 350}; // Wider and taller background
+        SDL_RenderFillRect(renderer, &questionBg);
+        
+        // Draw question elements
+        questionLabel->draw();
+        answer1Label->draw();
+        answer2Label->draw();
+        answer3Label->draw();
+        answer4Label->draw();
+        
+        // Reset draw color
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    }
 
-            SDL_RenderPresent(renderer);
+    SDL_RenderPresent(renderer);
             break;
             
         default:
@@ -943,11 +994,24 @@ void Game::loadLevel(int levelNum) {
 }
 
 void Game::advanceToNextLevel() {
+    // Ensure we're in GAME state when starting a transition
+    gameState = STATE_GAME;
+    
     // Start transition sequence using the transition manager
     transitionManager.startTransition(currentLevel, currentLevel + 1);
+    
+    // Make sure the transition label is properly initialized
+    if (transitionLabel == nullptr) {
+        transitionLabel = &manager.addEntity();
+        transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
+    }
 }
 
 void Game::initMainMenu() {
+    // Reset selection and hover states
+    selectedMenuItem = -1; // No initial selection 
+    menuHighlightActive = false;
+    
     // Create menu entity objects
     menuTitle = &manager.addEntity();
     menuNewGameButton = &manager.addEntity();
@@ -976,42 +1040,61 @@ void Game::initMainMenu() {
     menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 480);
     menuExitButton->getComponent<UILabel>().SetPosition(exitX, 560);
     
-    // Make menu items clickable
+    // Make menu items clickable but ensure they're not hovered initially
     menuNewGameButton->getComponent<UILabel>().SetClickable(true);
     menuNewGameButton->getComponent<UILabel>().SetOnClick([this]() { startGame(); });
     menuNewGameButton->getComponent<UILabel>().SetHoverColor(yellow);
+    menuNewGameButton->getComponent<UILabel>().ResetHoverState();
     
     menuLoadGameButton->getComponent<UILabel>().SetClickable(true);
     menuLoadGameButton->getComponent<UILabel>().SetOnClick([this]() { loadGame(); });
     menuLoadGameButton->getComponent<UILabel>().SetHoverColor(yellow);
+    menuLoadGameButton->getComponent<UILabel>().ResetHoverState();
     
     menuExitButton->getComponent<UILabel>().SetClickable(true);
     menuExitButton->getComponent<UILabel>().SetOnClick([this]() { isRunning = false; });
     menuExitButton->getComponent<UILabel>().SetHoverColor(yellow);
+    menuExitButton->getComponent<UILabel>().ResetHoverState();
     
-    // Highlight the selected menu item
-    updateMainMenu();
+    // Set the default selection to the first item but without hover effect
+    selectedMenuItem = MENU_NEW_GAME;
 }
 
 void Game::updateMainMenu() {
-    // Reset all menu items to white
-    menuNewGameButton->getComponent<UILabel>().SetTextColor(white);
-    menuLoadGameButton->getComponent<UILabel>().SetTextColor(white);
-    menuExitButton->getComponent<UILabel>().SetTextColor(white);
+    // Reset all menu items to default state
+    if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
+        menuNewGameButton->getComponent<UILabel>().ResetHoverState();
+    }
     
-    // Highlight the selected item
-    switch (selectedMenuItem) {
-        case MENU_NEW_GAME:
-            menuNewGameButton->getComponent<UILabel>().SetTextColor(yellow);
-            break;
-        case MENU_LOAD_GAME:
-            menuLoadGameButton->getComponent<UILabel>().SetTextColor(yellow);
-            break;
-        case MENU_EXIT:
-            menuExitButton->getComponent<UILabel>().SetTextColor(yellow);
-            break;
-        default:
-            break;
+    if (menuLoadGameButton && menuLoadGameButton->hasComponent<UILabel>()) {
+        menuLoadGameButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
+        menuExitButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    // Only highlight the selected item if highlight is active
+    if (menuHighlightActive) {
+        switch (selectedMenuItem) {
+            case MENU_NEW_GAME:
+                if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
+                    menuNewGameButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case MENU_LOAD_GAME:
+                if (menuLoadGameButton && menuLoadGameButton->hasComponent<UILabel>()) {
+                    menuLoadGameButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case MENU_EXIT:
+                if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
+                    menuExitButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -1041,12 +1124,20 @@ void Game::startGame() {
     // Clear all existing entities
     manager.clear();
     
+    // Ensure transition label is recreated
+    transitionLabel = &manager.addEntity();
+    transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
+    transitionManager.mTransitionLabel = transitionLabel;
+    
+    // Re-initialize transition manager with new entity manager state
+    transitionManager.init(this, &manager);
+    
     // Start with level 1
     currentLevel = 1;
     
     // Load the level and initialize game entities
-    loadLevel(currentLevel);
-    initEntities();
+            loadLevel(currentLevel);
+            initEntities();
 }
 
 void Game::loadGame() {
