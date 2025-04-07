@@ -65,6 +65,7 @@ Entity* menuLoadGameButton = nullptr;
 Entity* menuExitButton = nullptr;
 int selectedMenuItem = MENU_NEW_GAME;
 bool menuHighlightActive = false;
+bool menuItemSelected = false;
 
 Game::Game()
 {
@@ -1009,8 +1010,9 @@ void Game::advanceToNextLevel() {
 
 void Game::initMainMenu() {
     // Reset selection and hover states
-    selectedMenuItem = -1; // No initial selection 
-    menuHighlightActive = false;
+    selectedMenuItem = MENU_NEW_GAME; // Default selection
+    menuItemSelected = false;
+    menuHighlightActive = false; // Start with no highlights
     
     // Create menu entity objects
     menuTitle = &manager.addEntity();
@@ -1056,8 +1058,7 @@ void Game::initMainMenu() {
     menuExitButton->getComponent<UILabel>().SetHoverColor(yellow);
     menuExitButton->getComponent<UILabel>().ResetHoverState();
     
-    // Set the default selection to the first item but without hover effect
-    selectedMenuItem = MENU_NEW_GAME;
+    // No need to call updateMainMenu() since menuHighlightActive is false
 }
 
 void Game::updateMainMenu() {
