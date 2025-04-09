@@ -6,6 +6,7 @@
 #include "Collision.hpp"
 #include "AssetManager.hpp"
 #include <sstream>
+#include <iomanip>
 #include <random>
 #include <ctime>
 
@@ -58,6 +59,11 @@ int Game::maxLevels = 2; // Set the maximum number of levels here
 bool Game::showingExitInstructions = false; // Initialize to false
 GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
 
+// Initialize timer variables
+Uint32 Game::gameStartTime = 0;
+Uint32 Game::gameplayTime = 0;
+Entity* Game::timerLabel = nullptr;
+
 // Main menu variables
 Entity* menuTitle = nullptr;
 Entity* menuNewGameButton = nullptr;
@@ -81,7 +87,39 @@ Game::Game()
         {"What year was the first iPhone released?", {"2005", "2006", "2007", "2008"}, 2},
         {"How many bits make up a byte?", {"4", "8", "16", "32"}, 1},
         {"What does HTML stand for?", {"HyperText Markup Language", "High Technical Modern Language", "HyperTransfer Markup Logic", "High Tech Multi Language"}, 0},
-        {"Which of these is NOT a programming paradigm?", {"Object-Oriented", "Functional", "Procedural", "Dialectical"}, 3}
+        {"Which of these is NOT a programming paradigm?", {"Object-Oriented", "Functional", "Procedural", "Dialectical"}, 3},
+        
+        {"What does RAM stand for?", {"Random Access Memory", "Read Access Memory", "Rapid Access Memory", "Runtime Access Memory"}, 0},
+        {"Which data structure follows LIFO (Last In First Out) principle?", {"Queue", "Stack", "Linked List", "Graph"}, 1},
+        {"What is the time complexity of a linear search algorithm?", {"O(1)", "O(log n)", "O(n)", "O(n^2)"}, 2},
+        {"Which programming language is primarily used for iOS app development?", {"Java", "C#", "Swift", "Python"}, 2},
+        {"What does SQL stand for?", {"Structured Query Language", "Simple Query Language", "Standard Query Logic", "System Query Loop"}, 0},
+        {"Who is considered the father of computer science?", {"Steve Jobs", "Alan Turing", "Bill Gates", "Tim Berners-Lee"}, 1},
+        {"Which of these is NOT a version control system?", {"Git", "Mercurial", "SVN", "Django"}, 3},
+        {"What is the name of the first widely-used programming language?", {"FORTRAN", "COBOL", "C", "BASIC"}, 0},
+        {"In binary, what is 1010 in decimal?", {"2", "8", "10", "12"}, 2},
+        {"Which sorting algorithm has an average time complexity of O(n log n)?", {"Bubble Sort", "Quick Sort", "Selection Sort", "Insertion Sort"}, 1},
+        
+        {"Which console was released first?", {"PlayStation", "Nintendo 64", "Xbox", "Sega Genesis"}, 3},
+        {"What programming language was Minecraft originally written in?", {"C++", "Java", "Python", "C#"}, 1},
+        {"Who is the creator of Linux?", {"Steve Wozniak", "Linus Torvalds", "Bill Gates", "Mark Zuckerberg"}, 1},
+        {"Which video game franchise features a protagonist named Master Chief?", {"Call of Duty", "Halo", "Gears of War", "Destiny"}, 1},
+        {"What was the first popular web browser?", {"Internet Explorer", "Firefox", "Netscape Navigator", "Chrome"}, 2},
+        {"Which company developed the game Fortnite?", {"Valve", "Epic Games", "Blizzard", "EA"}, 1},
+        {"What does GPU stand for?", {"General Processing Unit", "Graphics Processing Unit", "Gaming Performance Utility", "Global Processing Unit"}, 1},
+        {"Which of these is NOT one of the original three starter Pokémon?", {"Bulbasaur", "Charmander", "Pikachu", "Squirtle"}, 2},
+        {"Which company created the first commercially successful mouse?", {"Microsoft", "Apple", "IBM", "Logitech"}, 1},
+        
+        {"What is the result of 1 + 1 in binary?", {"0", "1", "10", "11"}, 2},
+        {"What is the value of π (pi) rounded to two decimal places?", {"3.41", "3.14", "3.50", "3.16"}, 1},
+        {"In Boolean algebra, what is the result of TRUE AND FALSE?", {"TRUE", "FALSE", "NULL", "ERROR"}, 1},
+        {"What is the solution to x in the equation 2x + 5 = 15?", {"5", "10", "7.5", "20"}, 0},
+        {"What is the square root of 144?", {"10", "12", "14", "16"}, 1},
+        {"Which of these is NOT a prime number?", {"13", "17", "21", "23"}, 2},
+        {"What is the perimeter of a square with sides of length 6?", {"12", "18", "24", "36"}, 2},
+        {"What is the next number in the sequence: 2, 4, 8, 16, ...?", {"24", "30", "32", "42"}, 2},
+        {"What is the area of a circle with radius 5?", {"25π", "10π", "15π", "20π"}, 0},
+        {"What does the ^ operator typically represent in programming?", {"Multiplication", "Division", "Exponentiation", "Bitwise XOR"}, 3}
     };
 }
 
@@ -99,6 +137,7 @@ void Game::initEntities() {
     clueCounter = &manager.addEntity();
     feedbackLabel = &manager.addEntity();
     transitionLabel = &manager.addEntity();
+    timerLabel = &manager.addEntity();
     
     questionLabel = &manager.addEntity();
     answer1Label = &manager.addEntity();
@@ -147,7 +186,7 @@ void Game::initEntities() {
     player->addGroup(Game::groupPlayers);
 
     // Create multiple enemies at random positions - number based on level
-    int numEnemies = (currentLevel == 1) ? 3 : 5; // More enemies in level 2
+    int numEnemies = (currentLevel == 1) ? 3 : 10; // More enemies in level 2
     
     for (int i = 0; i < numEnemies; i++) {
         Entity& enemy = manager.addEntity();
@@ -166,6 +205,7 @@ void Game::initEntities() {
     ammobar->addComponent<UILabel>(20, 60, "Test", "font1", white);
     gameover->addComponent<UILabel>(0, 0, "", "font2", white);
     clueCounter->addComponent<UILabel>(20, 100, "Clues: 0/" + std::to_string(totalClues), "font1", white);
+    timerLabel->addComponent<UILabel>((1920/2) - 100, 20, "Time: 00:00", "font1", white);
     
     questionLabel->addComponent<UILabel>(0, 300, "", "font1", white);
     answer1Label->addComponent<UILabel>(0, 340, "", "font1", white);
@@ -439,10 +479,33 @@ void Game::update()
             break;
             
         case STATE_GAME:
-    // Always refresh entity manager for proper lifecycle management
-    manager.refresh();
-    
-    // Handle transition if active
+            // Update gameplay timer
+            if (gameStartTime > 0 && !gameOver) {
+                gameplayTime = currentTime - gameStartTime;
+                
+                // Format time as MM:SS
+                Uint32 totalSeconds = gameplayTime / 1000;
+                Uint32 minutes = totalSeconds / 60;
+                Uint32 seconds = totalSeconds % 60;
+                
+                std::stringstream timeSS;
+                timeSS << "Time: " << std::setfill('0') << std::setw(2) << minutes 
+                       << ":" << std::setfill('0') << std::setw(2) << seconds;
+                
+                if (timerLabel != nullptr && timerLabel->hasComponent<UILabel>()) {
+                    timerLabel->getComponent<UILabel>().SetLabelText(timeSS.str(), "font1");
+                    
+                    // Get the width of the updated text and recenter it
+                    int timerWidth = timerLabel->getComponent<UILabel>().GetWidth();
+                    int xPos = (1920 - timerWidth) / 2; // Center horizontally
+                    timerLabel->getComponent<UILabel>().SetPosition(xPos, 20); // Keep at top
+                }
+            }
+            
+            // Always refresh entity manager for proper lifecycle management
+            manager.refresh();
+            
+            // Handle transition if active
             if (transitionManager.isTransitioning()) {
                 if (transitionManager.updateTransition()) {
                     // Transition is complete, proceed with level change
@@ -561,11 +624,38 @@ void Game::update()
     }
     
     // Continue with regular game update logic - only if player exists
-    if (player != nullptr && player->isActive()) {
+    if (player != nullptr && player->isActive() && gameState == STATE_GAME) {
         Vector2D playerPos = player->getComponent<TransformComponent>().position;
         
         manager.update();
         
+        // Get updated player position after manager.update()
+        TransformComponent& playerTransform = player->getComponent<TransformComponent>();
+        
+        // Define world boundaries
+        int worldWidth = 60 * 32 * 2;  // Assuming map size based on Map::LoadMap usage
+        int worldHeight = 34 * 32 * 2;
+        
+        // Player dimensions
+        int playerWidth = playerTransform.width * playerTransform.scale;
+        int playerHeight = playerTransform.height * playerTransform.scale;
+        
+        // Clamp player position to world boundaries
+        if (playerTransform.position.x < 0) {
+            playerTransform.position.x = 0;
+        }
+        if (playerTransform.position.y < 0) {
+            playerTransform.position.y = 0;
+        }
+        if (playerTransform.position.x + playerWidth > worldWidth) {
+            playerTransform.position.x = worldWidth - playerWidth;
+        }
+        if (playerTransform.position.y + playerHeight > worldHeight) {
+            playerTransform.position.y = worldHeight - playerHeight;
+        }
+
+        // Update player collider after potential position clamping
+        player->getComponent<ColliderComponent>().update();
         SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
         
         damageTimer -= 1.0f/60.0f;
@@ -639,8 +729,6 @@ void Game::update()
         camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
 
         // Camera bounds
-        int worldWidth = 60 * 32 * 2;
-        int worldHeight = 34 * 32 * 2;
         if(camera.x < 0) camera.x = 0;
         if(camera.y < 0) camera.y = 0;
         if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
@@ -770,6 +858,7 @@ void Game::render()
     healthbar->draw();
     ammobar->draw();
     clueCounter->draw();
+    timerLabel->draw();
     gameover->draw();
     
     // Draw feedback if active (for both question feedback and exit instructions)
@@ -853,6 +942,10 @@ void Game::restart() {
         delete map;
         map = nullptr;
     }
+    
+    // Reset gameplay timer
+    gameStartTime = SDL_GetTicks();
+    gameplayTime = 0;
     
     // Load first level
     loadLevel(currentLevel);
@@ -974,8 +1067,8 @@ void Game::loadLevel(int levelNum) {
         totalHealthPotions = 2;
     } else if (currentLevel == 2) {
         totalClues = 5;
-        totalMagazines = 4;  
-        totalHealthPotions = 3;
+        totalMagazines = 14;  
+        totalHealthPotions = 12;
     }
     
     // Create appropriate map based on level number
@@ -1115,6 +1208,10 @@ void Game::renderMainMenu() {
 void Game::startGame() {
     // Change game state
     gameState = STATE_GAME;
+    
+    // Start gameplay timer
+    gameStartTime = SDL_GetTicks();
+    gameplayTime = 0;
     
     // Clear menu entities
     menuTitle = nullptr;

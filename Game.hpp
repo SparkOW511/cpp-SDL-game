@@ -83,6 +83,11 @@ class Game {
         static bool showingExitInstructions; // Tracks if exit instructions have been shown
         static GameState gameState;          // Current game state
 
+        // Timer related methods and variables
+        static Uint32 gameStartTime;
+        static Uint32 gameplayTime;
+        static Entity* timerLabel;
+
         enum groupLabels : std::size_t {
             groupMap,
             groupPlayers,
