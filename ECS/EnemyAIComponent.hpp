@@ -9,7 +9,7 @@ class EnemyAIComponent : public Component {
         Manager& manager;
         TransformComponent* transform;
         SpriteComponent* sprite;
-        float chaseRange = 200.0f;  // Distance to start chasing
+        float chaseRange = 300.0f;  // Distance to start chasing
         float minDistance = 50.0f;  // Minimum distance to keep from player
         float backoffDistance = 45.0f; // Distance to start backing off (slightly less than minDistance)
         float moveSpeed = 1.0f; // Reduced from 1.7f to correct overall speed
