@@ -107,7 +107,7 @@ Game::Game()
         {"What was the first popular web browser?", {"Internet Explorer", "Firefox", "Netscape Navigator", "Chrome"}, 2},
         {"Which company developed the game Fortnite?", {"Valve", "Epic Games", "Blizzard", "EA"}, 1},
         {"What does GPU stand for?", {"General Processing Unit", "Graphics Processing Unit", "Gaming Performance Utility", "Global Processing Unit"}, 1},
-        {"Which of these is NOT one of the original three starter Pokémon?", {"Bulbasaur", "Charmander", "Pikachu", "Squirtle"}, 2},
+        {"Which of these is NOT one of the original three starter Pokemon?", {"Bulbasaur", "Charmander", "Pikachu", "Squirtle"}, 2},
         {"Which company created the first commercially successful mouse?", {"Microsoft", "Apple", "IBM", "Logitech"}, 1},
         
         {"What is the result of 1 + 1 in binary?", {"0", "1", "10", "11"}, 2},
@@ -118,7 +118,7 @@ Game::Game()
         {"Which of these is NOT a prime number?", {"13", "17", "21", "23"}, 2},
         {"What is the perimeter of a square with sides of length 6?", {"12", "18", "24", "36"}, 2},
         {"What is the next number in the sequence: 2, 4, 8, 16, ...?", {"24", "30", "32", "42"}, 2},
-        {"What is the area of a circle with radius 5?", {"25π", "10π", "15π", "20π"}, 0},
+        {"What is the area of a circle with radius 5?", {"25pi", "10pi", "15pi", "20pi"}, 0},
         {"What does the ^ operator typically represent in programming?", {"Multiplication", "Division", "Exponentiation", "Bitwise XOR"}, 3}
     };
 }
