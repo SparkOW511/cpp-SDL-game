@@ -950,6 +950,9 @@ void Game::restart() {
     currentLevel = 1;
     gameState = STATE_GAME; // Ensure we're in game state
     
+    // Reset used questions when restarting the game
+    resetUsedQuestions();
+    
     // Set clue count correctly for level 1
     totalClues = 3; // Reset to default value, loadLevel will adjust if needed
     
@@ -997,9 +1000,29 @@ void Game::showQuestion(Entity* clueEntity) {
         e->getComponent<SpriteComponent>().Play("Idle");
     }
     
+    // Check if we've used all questions
+    if (usedQuestions.size() >= questions.size()) {
+        // All questions have been used, reset the set to allow reuse
+        usedQuestions.clear();
+    }
+    
     // Use proper seeded random for question selection
     static std::mt19937 rng(std::time(nullptr));
-    currentQuestion = rng() % questions.size();
+    
+    // Select only from unused questions
+    std::vector<int> availableQuestions;
+    for (size_t i = 0; i < questions.size(); i++) {
+        if (usedQuestions.find(i) == usedQuestions.end()) {
+            availableQuestions.push_back(i);
+        }
+    }
+    
+    // Select a random question from available ones
+    int randomIndex = rng() % availableQuestions.size();
+    currentQuestion = availableQuestions[randomIndex];
+    
+    // Mark this question as used
+    usedQuestions.insert(currentQuestion);
     
     Question q = questions[currentQuestion];
     
@@ -1116,6 +1139,9 @@ void Game::loadLevel(int levelNum) {
 void Game::advanceToNextLevel() {
     // Ensure we're in GAME state when starting a transition
     gameState = STATE_GAME;
+    
+    // Reset used questions when advancing to the next level
+    resetUsedQuestions();
     
     // Start transition sequence using the transition manager
     transitionManager.startTransition(currentLevel, currentLevel + 1);

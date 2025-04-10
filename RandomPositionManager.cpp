@@ -44,11 +44,11 @@ Vector2D RandomPositionManager::findRandomSpawnPosition(int currentLevel) {
     }
     else if (currentLevel == 3) {
         // Level 3: Spawn player at position marked with 5 in the map
-        return {35*64, 31*64};
+        return {30*64, 31*64};
     }
     
     // Default fallback if level is not recognized
-    return {15*32, 15*32};
+    return {15*64, 15*64};
 }
 
 Vector2D RandomPositionManager::findRandomCluePosition(int currentLevel) {
@@ -290,7 +290,7 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
             {17*64, 1*64},
             {59*64, 2*64},
             {10*64, 5*64},
-            {40*64, 5*64},
+            {42*64, 5*64},
             {47*64, 5*64},
             {4*64, 6*64},
             {18*64, 7*64},
@@ -300,7 +300,6 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
             {36*64, 12*64},
             {49*64, 13*64},
             {47*64, 17*64},
-            {32*64, 21*64},
             {38*64, 19*64},
             {22*64, 22*64},
             {12*64, 22*64},

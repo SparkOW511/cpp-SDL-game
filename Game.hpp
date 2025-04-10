@@ -88,6 +88,10 @@ class Game {
         static Uint32 gameplayTime;
         static Entity* timerLabel;
 
+        // Track which questions have been used
+        std::set<int> usedQuestions;
+        int currentQuestion = -1; // Track the currently selected question
+
         enum groupLabels : std::size_t {
             groupMap,
             groupPlayers,
@@ -133,7 +137,6 @@ class Game {
         };
         
         std::vector<Question> questions;
-        int currentQuestion;
         
         Entity* questionLabel = nullptr;
         Entity* answer1Label = nullptr;
@@ -142,5 +145,8 @@ class Game {
         Entity* answer4Label = nullptr;
         Entity* questionBackground = nullptr;
         Entity* transitionLabel = nullptr;
+
+        // Reset question tracking when restarting or changing levels
+        void resetUsedQuestions() { usedQuestions.clear(); }
 };
 #endif
