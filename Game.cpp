@@ -55,7 +55,7 @@ bool Game::showFeedback = false;
 Uint32 Game::feedbackStartTime = 0;
 Entity* Game::feedbackLabel = nullptr;
 int Game::currentLevel = 1;
-int Game::maxLevels = 2; // Set the maximum number of levels here
+int Game::maxLevels = 3; // Set the maximum number of levels here
 bool Game::showingExitInstructions = false; // Initialize to false
 GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
 
@@ -186,7 +186,12 @@ void Game::initEntities() {
     player->addGroup(Game::groupPlayers);
 
     // Create multiple enemies at random positions - number based on level
-    int numEnemies = (currentLevel == 1) ? 3 : 10; // More enemies in level 2
+    int numEnemies = 3; // Default for level 1
+    if (currentLevel == 2) {
+        numEnemies = 8; // More enemies in level 2
+    } else if (currentLevel == 3) {
+        numEnemies = 13; // Even more enemies in level 3
+    }
     
     for (int i = 0; i < numEnemies; i++) {
         Entity& enemy = manager.addEntity();
@@ -250,6 +255,7 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     // Load textures
     assets->AddTexture("terrainlvl1", "./assets/lvl1/TerrainTexturesLevel1.png");
     assets->AddTexture("terrainlvl2", "./assets/lvl2/TerrainTexturesLevel2.png");
+    assets->AddTexture("terrainlvl3", "./assets/lvl3/TerrainTexturesLevel3.png");
 
     assets->AddTexture("player", "./assets/playeranimations.png");
     assets->AddTexture("enemy", "./assets/enemyanimations.png");
@@ -739,7 +745,11 @@ void Game::update()
             // All clues collected, but still require player to go north
             if (!showingExitInstructions) {
                 // Show instructions to player only once
-                feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
+                if (currentLevel == 3) {
+                    feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Enter the pyramid to complete the level.", "font1", {255, 215, 0, 255});
+                } else {
+                    feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
+                }
                 
                 // Position the feedback at the bottom of the screen
                 int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
@@ -752,74 +762,86 @@ void Game::update()
                 showingExitInstructions = true;
             }
             
-            // Check if player has gone far enough north
-            if (player->getComponent<TransformComponent>().position.y < 100) {
-                // Player has gone north enough, proceed to next level
-                if (currentLevel < maxLevels) {
-                    // Advance to next level
-                    advanceToNextLevel();
-                } else {
-                    // Show final win message if all levels completed
-                    gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
-                    
-                    // Center the win text
-                    int textWidth = gameover->getComponent<UILabel>().GetWidth();
-                    int textHeight = gameover->getComponent<UILabel>().GetHeight();
-                    
-                    int xPos = (1920 - textWidth) / 2;
-                    int yPos = (1080 - textHeight) / 2;
-                    
-                    gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-                    
-                    // Hide UI elements except game over message
-                    healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-                    ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-                    clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-                    
-                    // Reset all enemy animations to idle
-                    for(auto& e : *enemies) {
-                        if(e->hasComponent<SpriteComponent>()) {
-                            e->getComponent<SpriteComponent>().Play("Idle");
+            // Check win condition based on level
+            if (currentLevel == 3) {
+                // For level 3, check if player has entered the pyramid at tiles 20 and 21 (x=25,y=20 and x=26,y=20)
+                float playerX = player->getComponent<TransformComponent>().position.x / 64;
+                float playerY = player->getComponent<TransformComponent>().position.y / 64;
+                
+                // Check if player is at the pyramid entrance
+                if ((playerX >= 24 && playerX <= 26) && (playerY >= 19 && playerY <= 20)) {
+                    // Player has reached the pyramid, proceed to next level or win
+                    if (currentLevel < maxLevels) {
+                        // Advance to next level
+                        advanceToNextLevel();
+                    } else {
+                        // Show final win message if all levels completed
+                        gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
+                        
+                        // Center the win text
+                        int textWidth = gameover->getComponent<UILabel>().GetWidth();
+                        int textHeight = gameover->getComponent<UILabel>().GetHeight();
+                        
+                        int xPos = (1920 - textWidth) / 2;
+                        int yPos = (1080 - textHeight) / 2;
+                        
+                        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+                        
+                        // Hide UI elements except game over message
+                        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+                        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+                        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+                        
+                        // Reset all enemy animations to idle
+                        for(auto& e : *enemies) {
+                            if(e->hasComponent<SpriteComponent>()) {
+                                e->getComponent<SpriteComponent>().Play("Idle");
+                            }
                         }
+                        
+                        player->destroy();
+                        gameOver = true;
+                        playerWon = true;
                     }
-                    
-                    player->destroy();
-                    gameOver = true;
-                    playerWon = true;
+                }
+            } else {
+                // For other levels, check if player has gone far enough north
+                if (player->getComponent<TransformComponent>().position.y < 100) {
+                    // Player has gone north enough, proceed to next level
+                    if (currentLevel < maxLevels) {
+                        // Advance to next level
+                        advanceToNextLevel();
+                    } else {
+                        // Show final win message if all levels completed
+                        gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
+                        
+                        // Center the win text
+                        int textWidth = gameover->getComponent<UILabel>().GetWidth();
+                        int textHeight = gameover->getComponent<UILabel>().GetHeight();
+                        
+                        int xPos = (1920 - textWidth) / 2;
+                        int yPos = (1080 - textHeight) / 2;
+                        
+                        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+                        
+                        // Hide UI elements except game over message
+                        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+                        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+                        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+                        
+                        // Reset all enemy animations to idle
+                        for(auto& e : *enemies) {
+                            if(e->hasComponent<SpriteComponent>()) {
+                                e->getComponent<SpriteComponent>().Play("Idle");
+                            }
+                        }
+                        
+                        player->destroy();
+                        gameOver = true;
+                        playerWon = true;
+                    }
                 }
             }
-        }
-        
-        // Check player death
-        if(player->getComponent<HealthComponent>().health <= 0) {
-            // Show game over message
-            gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
-            
-            // Center the text horizontally and vertically on 1920x1080 resolution
-            int textWidth = gameover->getComponent<UILabel>().GetWidth();
-            int textHeight = gameover->getComponent<UILabel>().GetHeight();
-            
-            int xPos = (1920 - textWidth) / 2;
-            int yPos = (1080 - textHeight) / 2;
-            
-            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-            
-            // Hide UI elements except game over message
-            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-            
-            // Reset all enemy animations to idle
-            for(auto& e : *enemies) {
-                if(e->hasComponent<SpriteComponent>()) {
-                    e->getComponent<SpriteComponent>().Play("Idle");
-                }
-            }
-            
-            // Set game over state before destroying player 
-            gameOver = true;
-            playerWon = false;
-            player->destroy();
         }
             }
             break;
@@ -1067,8 +1089,12 @@ void Game::loadLevel(int levelNum) {
         totalHealthPotions = 2;
     } else if (currentLevel == 2) {
         totalClues = 5;
-        totalMagazines = 14;  
-        totalHealthPotions = 12;
+        totalMagazines = 9;  
+        totalHealthPotions = 9;
+    } else if (currentLevel == 3) {
+        totalClues = 7;
+        totalMagazines = 15;  
+        totalHealthPotions = 15;
     }
     
     // Create appropriate map based on level number
