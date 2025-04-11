@@ -32,6 +32,9 @@ std::vector<Entity*>* projectiles;
 std::vector<Entity*>* objects;
 std::vector<Entity*>* ui;
 
+// Additional question variable to track if answer was submitted
+bool answerSubmitted = false;
+
 // Collision variables
 float damageTimer = 1.0f;
 const float damageCooldown = 0.3f;
@@ -983,6 +986,7 @@ void Game::showQuestion(Entity* clueEntity) {
     if (questionActive) return;
     
     questionActive = true;
+    answerSubmitted = false; // Reset submission status for new question
     pendingClueEntity = clueEntity;
     
     // Set player to idle animation when entering question mode
@@ -1053,7 +1057,10 @@ void Game::showQuestion(Entity* clueEntity) {
 }
 
 void Game::checkAnswer(int selectedAnswer) {
-    if (!questionActive) return;
+    if (!questionActive || answerSubmitted) return;
+    
+    // Mark that an answer has been submitted to prevent multiple attempts
+    answerSubmitted = true;
     
     isAnswerCorrect = (selectedAnswer == questions[currentQuestion].correctAnswer);
     
@@ -1077,6 +1084,7 @@ void Game::checkAnswer(int selectedAnswer) {
 
 void Game::closeQuestion() {
     questionActive = false;
+    answerSubmitted = false; // Reset for next question
     pendingClueEntity = nullptr;
     showFeedback = false;
     
@@ -1139,9 +1147,6 @@ void Game::loadLevel(int levelNum) {
 void Game::advanceToNextLevel() {
     // Ensure we're in GAME state when starting a transition
     gameState = STATE_GAME;
-    
-    // Reset used questions when advancing to the next level
-    resetUsedQuestions();
     
     // Start transition sequence using the transition manager
     transitionManager.startTransition(currentLevel, currentLevel + 1);
