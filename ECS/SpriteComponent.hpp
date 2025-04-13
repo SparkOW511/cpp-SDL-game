@@ -17,6 +17,12 @@ class SpriteComponent : public Component {
         bool animated = false;
         int frames = 0;
         int speed = 100;
+        
+        // Alpha value for opacity (0-255)
+        Uint8 alpha = 255;
+        
+        // Flag to determine if this is a clue (for proximity-based opacity)
+        bool isClue = false;
 
     public:
 
@@ -29,6 +35,12 @@ class SpriteComponent : public Component {
         SpriteComponent(std::string id) {
             textureID = id;
             setTex(id);
+            
+            // Set clue flag if this is a clue
+            if (id == "clue") {
+                isClue = true;
+                alpha = 0; // Start fully transparent
+            }
         }
 
         SpriteComponent(std::string id, bool isAnimated) {
@@ -62,6 +74,15 @@ class SpriteComponent : public Component {
             Play("Idle");
 
             setTex(id);
+            
+            // Set clue flag if this is a clue
+            if (id == "clue") {
+                isClue = true;
+                alpha = 0; // Start fully transparent
+                if (animated) {
+                    Play("Clue");
+                }
+            }
         }
         ~SpriteComponent() {
             
@@ -74,6 +95,10 @@ class SpriteComponent : public Component {
         std::string getTexID() const {
             return textureID;
         }
+        
+        void setAlpha(Uint8 a) {
+            alpha = a;
+        }
 
         void init() override {
 
@@ -85,7 +110,6 @@ class SpriteComponent : public Component {
         }
 
         void update() override {
-
             if(animated) {
                 srcRect.x = srcRect.w * static_cast<int>((SDL_GetTicks() / speed) % frames);
             }
@@ -96,10 +120,41 @@ class SpriteComponent : public Component {
             destRect.y = static_cast<int>(transform->position.y) - Game::camera.y;
             destRect.w = transform->width * transform->scale;
             destRect.h = transform->height * transform->scale;
+            
+            // Update alpha for clues based on player proximity if player exists
+            if (isClue && player != nullptr) {
+                // Calculate distance between player and clue
+                Vector2D playerPos = player->getComponent<TransformComponent>().position;
+                Vector2D cluePos = transform->position;
+                
+                // Calculate Euclidean distance
+                float distance = sqrt(
+                    pow(playerPos.x - cluePos.x, 2) + 
+                    pow(playerPos.y - cluePos.y, 2)
+                );
+                
+                // Define maximum and minimum distances for visibility
+                const float MAX_VISIBLE_DISTANCE = 1000.0f; // Fully invisible beyond this distance
+                const float MIN_VISIBLE_DISTANCE = 200.0f; // Fully visible at this distance
+                
+                // Calculate alpha based on distance (inverse relationship)
+                if (distance >= MAX_VISIBLE_DISTANCE) {
+                    alpha = 0; // Fully transparent if too far
+                } else if (distance <= MIN_VISIBLE_DISTANCE) {
+                    alpha = 255; // Fully opaque if close enough
+                } else {
+                    // Linear interpolation between 0 and 255 based on distance
+                    alpha = static_cast<Uint8>(255 * (1.0f - (distance - MIN_VISIBLE_DISTANCE) / (MAX_VISIBLE_DISTANCE - MIN_VISIBLE_DISTANCE)));
+                }
+            }
         }
 
         void draw() override {
-            TextureManager::Draw(texture, srcRect, destRect, spriteFlip);
+            if (isClue) {
+                TextureManager::Draw(texture, srcRect, destRect, spriteFlip, alpha);
+            } else {
+                TextureManager::Draw(texture, srcRect, destRect, spriteFlip);
+            }
         }
 
         void Play(const char* animName) {

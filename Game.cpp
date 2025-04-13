@@ -733,6 +733,38 @@ void Game::update()
             }
         }
 
+        // Check if player is dead
+        if(player->getComponent<HealthComponent>().health <= 0) {
+            // Show game over message
+            gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
+            
+            // Center the game over text
+            int textWidth = gameover->getComponent<UILabel>().GetWidth();
+            int textHeight = gameover->getComponent<UILabel>().GetHeight();
+            
+            int xPos = (1920 - textWidth) / 2;
+            int yPos = (1080 - textHeight) / 2;
+            
+            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+            
+            // Hide UI elements except game over message
+            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+            
+            // Reset all enemy animations to idle
+            for(auto& e : *enemies) {
+                if(e->hasComponent<SpriteComponent>()) {
+                    e->getComponent<SpriteComponent>().Play("Idle");
+                }
+            }
+            
+            player->destroy();
+            gameOver = true;
+            playerWon = false;
+            return;
+        }
+
         // Center camera on player
         camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
         camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);

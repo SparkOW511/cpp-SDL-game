@@ -16,6 +16,9 @@ class ColliderComponent;
 class AssetManager;
 class Map;
 
+// Extern declarations for global entities
+extern Entity* player;
+
 // Game state enumeration 
 enum GameState {
     STATE_MAIN_MENU,
