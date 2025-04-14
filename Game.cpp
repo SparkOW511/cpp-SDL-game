@@ -16,7 +16,7 @@ Manager manager;
 
 // Global entity pointers instead of references
 Entity* player = nullptr;
-// enemy is now multiple entities, so no global pointer
+Entity* finalBoss = nullptr; // Final boss entity for level 4
 Entity* healthbar = nullptr;
 Entity* ammobar = nullptr;
 Entity* gameover = nullptr;
@@ -58,8 +58,10 @@ bool Game::showFeedback = false;
 Uint32 Game::feedbackStartTime = 0;
 Entity* Game::feedbackLabel = nullptr;
 int Game::currentLevel = 1;
-int Game::maxLevels = 3; // Set the maximum number of levels here
+int Game::maxLevels = 4; // Set the maximum number of levels here
 bool Game::showingExitInstructions = false; // Initialize to false
+bool Game::level4MapChanged = false; // Initialize level4MapChanged
+bool Game::finalBossDefeated = false; // Initialize finalBossDefeated
 GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
 
 // Initialize timer variables
@@ -194,6 +196,28 @@ void Game::initEntities() {
         numEnemies = 8; // More enemies in level 2
     } else if (currentLevel == 3) {
         numEnemies = 13; // Even more enemies in level 3
+    } else if (currentLevel == 4) {
+        numEnemies = 8; // Fewer enemies in level 4 to compensate for the boss
+    }
+    
+    // Create the final boss for level 4
+    if (currentLevel == 4) {
+        finalBoss = &manager.addEntity();
+        
+        // Use the exact coordinates from the map (position 4 at 34,15)
+        Vector2D bossPos = {34*64, 15*64};
+        
+        // Make the boss larger and stronger than regular enemies
+        // The sprite size is 32x32 but we use a larger scale and collider
+        finalBoss->addComponent<TransformComponent>(bossPos.x, bossPos.y, 32, 32, 4); // Use 32x32 at scale 4
+        finalBoss->addComponent<SpriteComponent>("boss", true); // Use boss sprite
+        finalBoss->addComponent<ColliderComponent>("boss");
+        finalBoss->addComponent<HealthComponent>(500); // Much more health
+        finalBoss->addComponent<EnemyAIComponent>(manager);
+        finalBoss->getComponent<EnemyAIComponent>().setSpeed(0.5f); // Slower but stronger
+        finalBoss->addGroup(Game::groupEnemies);
+    } else {
+        finalBoss = nullptr; // Clear final boss pointer for other levels
     }
     
     for (int i = 0; i < numEnemies; i++) {
@@ -259,9 +283,11 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddTexture("terrainlvl1", "./assets/lvl1/TerrainTexturesLevel1.png");
     assets->AddTexture("terrainlvl2", "./assets/lvl2/TerrainTexturesLevel2.png");
     assets->AddTexture("terrainlvl3", "./assets/lvl3/TerrainTexturesLevel3.png");
+    assets->AddTexture("terrainlvl4", "./assets/lvl4/TerrainTexturesLevel4.png");
 
     assets->AddTexture("player", "./assets/playeranimations.png");
     assets->AddTexture("enemy", "./assets/enemyanimations.png");
+    assets->AddTexture("boss", "./assets/finalbossanimations.png");
 
     assets->AddTexture("clue", "./assets/clue.png");
     assets->AddTexture("magazine", "./assets/magazine.png");
@@ -723,12 +749,58 @@ void Game::update()
             // Player collision with damage cooldown
             SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
             if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
-                player->getComponent<HealthComponent>().takeDamage(5);
+                // Boss deals more damage
+                if (currentLevel == 4 && e == finalBoss) {
+                    player->getComponent<HealthComponent>().takeDamage(10); // Boss deals more damage
+                } else {
+                    player->getComponent<HealthComponent>().takeDamage(5);
+                }
                 damageTimer = damageCooldown;
             }
 
             // Destroy dead enemies
             if(e->getComponent<HealthComponent>().health <= 0) {
+                // Check if the enemy is the final boss
+                if (currentLevel == 4 && e == finalBoss) {
+                    finalBossDefeated = true;
+                    // Show boss defeated message
+                    feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed!", "font1", {255, 215, 0, 255});
+                    
+                    // Position the feedback at the bottom of the screen
+                    int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+                    int xPos = (1920 - feedbackWidth) / 2;
+                    feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950);
+                    
+                    // Show feedback
+                    showFeedback = true;
+                    feedbackStartTime = SDL_GetTicks();
+                    
+                    // Change the map to reveal the exit
+                    level4MapChanged = true;
+                    
+                    // First, destroy all collider entities to avoid stale colliders
+                    for (auto c : *colliders) {
+                        c->destroy();
+                    }
+                    
+                    // Reload the map with the new file
+                    if (map != nullptr) {
+                        delete map;
+                        map = nullptr;
+                    }
+                    
+                    // Keep the same texture but load the "after" map
+                    std::string terrainTexture = "terrainlvl4";
+                    std::string mapPath = "./assets/lvl4/Level4MapAfter.map";
+                    
+                    // Create and load the new map
+                    map = new Map(terrainTexture, 2, 32, manager);
+                    map->LoadMap(mapPath, 60, 34);
+                    
+                    // Allow the manager to do a refresh to properly clean up destroyed entities
+                    manager.refresh();
+                }
+                
                 e->destroy();
             }
         }
@@ -776,12 +848,17 @@ void Game::update()
         if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
         
         // Check win condition
-        if (collectedClues >= totalClues) {
-            // All clues collected, but still require player to go north
+        if ((currentLevel != 4 && collectedClues >= totalClues) || 
+            (currentLevel == 4 && finalBossDefeated)) {
+            // All clues collected or boss defeated, but still require player to go north/exit
             if (!showingExitInstructions) {
                 // Show instructions to player only once
                 if (currentLevel == 3) {
-                    feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Enter the pyramid to complete the level.", "font1", {255, 215, 0, 255});
+                    feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Enter the pyramid to see what lies ahead.", "font1", {255, 215, 0, 255});
+                } else if (currentLevel == 4 && level4MapChanged) {
+                    // Boss already defeated, path revealed message shown previously
+                    // Just enable exit instructions mode
+                    showingExitInstructions = true;
                 } else {
                     feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
                 }
@@ -838,6 +915,41 @@ void Game::update()
                         gameOver = true;
                         playerWon = true;
                     }
+                }
+            } else if (currentLevel == 4 && level4MapChanged) {
+                // For level 4, check if player has reached the new exit at a specific position
+                float playerX = player->getComponent<TransformComponent>().position.x / 64;
+                float playerY = player->getComponent<TransformComponent>().position.y / 64;
+                
+                // Check if player is at the new exit (adjust coordinates as needed)
+                if ((playerX >= 28 && playerX <= 32) && (playerY >= 15 && playerY <= 17)) {
+                    // Player has reached the secret exit, show final win message
+                    gameover->getComponent<UILabel>().SetLabelText("CONGRATULATIONS! You found the secret exit! Press R to restart or ESC to exit", "font2");
+                    
+                    // Center the win text
+                    int textWidth = gameover->getComponent<UILabel>().GetWidth();
+                    int textHeight = gameover->getComponent<UILabel>().GetHeight();
+                    
+                    int xPos = (1920 - textWidth) / 2;
+                    int yPos = (1080 - textHeight) / 2;
+                    
+                    gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+                    
+                    // Hide UI elements except game over message
+                    healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+                    ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+                    clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+                    
+                    // Reset all enemy animations to idle
+                    for(auto& e : *enemies) {
+                        if(e->hasComponent<SpriteComponent>()) {
+                            e->getComponent<SpriteComponent>().Play("Idle");
+                        }
+                    }
+                    
+                    player->destroy();
+                    gameOver = true;
+                    playerWon = true;
                 }
             } else {
                 // For other levels, check if player has gone far enough north
@@ -982,6 +1094,8 @@ void Game::restart() {
     pendingClueEntity = nullptr;
     showFeedback = false;
     showingExitInstructions = false; // Reset exit instructions flag
+    level4MapChanged = false; // Reset level 4 map state
+    finalBossDefeated = false; // Reset final boss state
     currentLevel = 1;
     gameState = STATE_GAME; // Ensure we're in game state
     
@@ -1158,11 +1272,23 @@ void Game::loadLevel(int levelNum) {
         totalClues = 7;
         totalMagazines = 15;  
         totalHealthPotions = 15;
+    } else if (currentLevel == 4) {
+        totalClues = 0; // No clues in level 4, boss battle instead
+        totalMagazines = 7;
+        totalHealthPotions = 9;
+        level4MapChanged = false; // Reset the map change flag for level 4
+        finalBossDefeated = false; // Reset the boss defeated flag
     }
     
     // Create appropriate map based on level number
     std::string terrainTexture = "terrainlvl" + std::to_string(levelNum);
-    std::string mapPath = "./assets/lvl" + std::to_string(levelNum) + "/Level" + std::to_string(levelNum) + "Map.map";
+    std::string mapPath;
+    
+    if (currentLevel == 4 && level4MapChanged) {
+        mapPath = "./assets/lvl4/Level4MapAfter.map";
+    } else {
+        mapPath = "./assets/lvl" + std::to_string(levelNum) + "/Level" + std::to_string(levelNum) + "Map.map";
+    }
     
     // Ensure texture is loaded
     if (Game::assets->GetTexture(terrainTexture) == nullptr) {

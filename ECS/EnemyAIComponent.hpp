@@ -21,6 +21,11 @@ class EnemyAIComponent : public Component {
 
         EnemyAIComponent(Manager& mManager) : manager(mManager) {}
 
+        // Set the movement speed of the enemy
+        void setSpeed(float speed) {
+            moveSpeed = speed;
+        }
+
         void init() override {
             transform = &entity->getComponent<TransformComponent>();
             sprite = &entity->getComponent<SpriteComponent>();

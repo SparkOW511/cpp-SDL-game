@@ -46,6 +46,10 @@ Vector2D RandomPositionManager::findRandomSpawnPosition(int currentLevel) {
         // Level 3: Spawn player at position marked with 5 in the map
         return {30*64, 31*64};
     }
+    else if (currentLevel == 4) {
+        // Level 4: Fixed player position from map data (1)
+        return {34*64, 33*64}; // Player spawn at (34,33)
+    }
     
     // Default fallback if level is not recognized
     return {15*64, 15*64};
@@ -211,6 +215,18 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
             {58*64, 31*64}
         };
     }
+    else if (currentLevel == 4) {
+        // Level 4 magazine positions (number 2 from map)
+        magazinePoints = {
+            {34*64, 9*64},   // (34,9)
+            {43*64, 13*64},  // (43,13)
+            {24*64, 15*64},  // (24,15)
+            {24*64, 21*64},  // (24,21)
+            {39*64, 20*64},  // (39,20)
+            {24*64, 26*64},  // (24,26)
+            {42*64, 21*64}   // (42,21)
+        };
+    }
     
     // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
@@ -225,6 +241,7 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
         if (currentLevel == 1) return Vector2D{8*64, 3*64};
         else if (currentLevel == 2) return Vector2D{0*64, 3*64};
         else if (currentLevel == 3) return Vector2D{8*64, 3*64};
+        else if (currentLevel == 4) return Vector2D{34*64, 9*64};
         else return Vector2D{8*64, 3*64}; // Default fallback
     }
     
@@ -314,6 +331,20 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
             {9*64, 31*64}
         };
     }
+    else if (currentLevel == 4) {
+        // Level 4 health potion positions (number 3 from map)
+        potionPoints = {
+            {24*64, 11*64},   // (24,11)
+            {43*64, 10*64},   // (43,10)
+            {29*64, 16*64},   // (29,16)
+            {42*64, 16*64},   // (42,16)
+            {24*64, 21*64},   // (24,21)
+            {34*64, 21*64},   // (34,21)
+            {39*64, 25*64},   // (39,25)
+            {43*64, 25*64},   // (43,25)
+            {29*64, 23*64}    // (29,23)
+        };
+    }
     
     // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
@@ -328,6 +359,7 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
         if (currentLevel == 1) return Vector2D{9*64, 9*64};
         else if (currentLevel == 2) return Vector2D{1*64, 0*64};
         else if (currentLevel == 3) return Vector2D{5*64, 6*64};
+        else if (currentLevel == 4) return Vector2D{24*64, 11*64};
         else return Vector2D{9*64, 9*64}; // Default fallback
     }
     
@@ -412,6 +444,15 @@ Vector2D RandomPositionManager::findRandomEnemyPosition() {
             {51*64, 30*64}
         };
     }
+    else if (currentLevel == 4) {
+        // Level 4 enemy positions (number 5 from map)
+        enemyPoints = {
+            {30*64, 12*64},  // (30,12)
+            {38*64, 12*64},  // (38,12)
+            {30*64, 17*64},  // (30,17)
+            {38*64, 17*64}   // (38,17)
+        };
+    }
     
     // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
@@ -426,6 +467,7 @@ Vector2D RandomPositionManager::findRandomEnemyPosition() {
         if (currentLevel == 1) return Vector2D{12*64, 4*64};
         else if (currentLevel == 2) return Vector2D{9*64, 3*64};
         else if (currentLevel == 3) return Vector2D{12*64, 4*64};
+        else if (currentLevel == 4) return Vector2D{30*64, 12*64};
         else return Vector2D{12*64, 4*64}; // Default fallback
     }
     

@@ -29,7 +29,7 @@ class ColliderComponent : public Component {
         collider.h = size;
         tex = nullptr;
     }
-    
+
     ~ColliderComponent() {
         if (tex != nullptr) {
             SDL_DestroyTexture(tex);
