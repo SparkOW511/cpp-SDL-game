@@ -26,7 +26,8 @@ enum GameState {
     STATE_MAIN_MENU,
     STATE_GAME,
     STATE_PAUSE,
-    STATE_GAME_OVER
+    STATE_GAME_OVER,
+    STATE_END_SCREEN
 };
 
 // Menu item enumeration
@@ -35,6 +36,13 @@ enum MenuItem {
     MENU_LOAD_GAME,
     MENU_EXIT,
     MENU_ITEMS_COUNT
+};
+
+// End screen options
+enum EndScreenOption {
+    END_RESTART,
+    END_MAIN_MENU,
+    END_OPTIONS_COUNT
 };
 
 class Game {
@@ -67,6 +75,11 @@ class Game {
         void loadLevel(int levelNum);
         void advanceToNextLevel();
         
+        // End screen methods
+        void initEndScreen(bool victory);
+        void updateEndScreen();
+        void renderEndScreen();
+
         static SDL_Renderer *renderer;
         static SDL_Event event;
         static bool isRunning;
@@ -91,6 +104,8 @@ class Game {
         static bool finalBossDefeated;       // Tracks if the final boss has been defeated
         static bool scientistRescued;        // Tracks if the scientist has been rescued
         static bool canRescueScientist;      // Tracks if player can interact with scientist
+        static bool needsRestart;            // Flag to indicate game needs restart
+        static bool returnToMainMenu;        // Flag to indicate return to main menu
 
         // Timer related methods and variables
         static Uint32 gameStartTime;
@@ -135,6 +150,17 @@ class Game {
         int selectedMenuItem = MENU_NEW_GAME; // Default to New Game
         bool menuItemSelected = false;
         bool menuHighlightActive = false;     // Flag to track if menu highlights should be active
+        
+        // End Screen state tracking
+        int selectedEndOption = END_RESTART;  // Default to restart
+        bool endOptionSelected = false;
+        bool endHighlightActive = false;      // Track if highlights should be active
+        
+        // Entities for end screen
+        Entity* endTitle = nullptr;
+        Entity* endMessage = nullptr;
+        Entity* endRestartButton = nullptr;
+        Entity* endMenuButton = nullptr;
         
         // Managers
         RandomPositionManager positionManager;

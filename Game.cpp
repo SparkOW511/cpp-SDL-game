@@ -65,6 +65,8 @@ bool Game::level4MapChanged = false; // Initialize level4MapChanged
 bool Game::finalBossDefeated = false; // Initialize finalBossDefeated
 bool Game::scientistRescued = false; // Initialize scientistRescued
 bool Game::canRescueScientist = false; // Initialize canRescueScientist
+bool Game::needsRestart = false; // Initialize needsRestart flag
+bool Game::returnToMainMenu = false; // Initialize returnToMainMenu flag
 GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
 
 // Initialize timer variables
@@ -80,6 +82,15 @@ Entity* menuExitButton = nullptr;
 int selectedMenuItem = MENU_NEW_GAME;
 bool menuHighlightActive = false;
 bool menuItemSelected = false;
+
+// End screen variables
+Entity* endTitle = nullptr;
+Entity* endMessage = nullptr;
+Entity* endRestartButton = nullptr;
+Entity* endMenuButton = nullptr;
+int selectedEndOption = END_RESTART;
+bool endOptionSelected = false;
+bool endHighlightActive = false;
 
 Game::Game()
 {
@@ -229,7 +240,6 @@ void Game::initEntities() {
         scientist->getComponent<SpriteComponent>().Play("Locked"); // Use regular Idle animation since we don't have specific scientist animations
         scientist->addGroup(Game::groupObjects); // Add to objects group so it's visible
         
-        std::cout << "Scientist created at position: " << scientistPos.x/64 << "," << scientistPos.y/64 << std::endl;
     } else {
         finalBoss = nullptr; // Clear final boss pointer for other levels
         scientist = nullptr; // Clear scientist pointer for other levels
@@ -449,33 +459,66 @@ void Game::handleEvents()
                         scientist->getComponent<SpriteComponent>().Play("Idle");
                         scientistRescued = true;
                         
-                        // Show game completion screen
-                        gameover->getComponent<UILabel>().SetLabelText("MISSION COMPLETE! Scientist rescued! Press R to restart or ESC to exit", "font2");
-                        
-                        // Center the win text
-                        int textWidth = gameover->getComponent<UILabel>().GetWidth();
-                        int textHeight = gameover->getComponent<UILabel>().GetHeight();
-                        
-                        int xPos = (1920 - textWidth) / 2;
-                        int yPos = (1080 - textHeight) / 2;
-                        
-                        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-                        
-                        // Hide UI elements except game over message
-                        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-                        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-                        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-                        
-                        // Reset all enemy animations to idle
-                        for(auto& e : *enemies) {
-                            if(e->hasComponent<SpriteComponent>()) {
-                                e->getComponent<SpriteComponent>().Play("Idle");
-                            }
-                        }
-                        
-                        gameOver = true;
-                        playerWon = true;
+                        // Initialize the end screen with victory
+                        initEndScreen(true);
                     }
+                }
+            }
+            else if (gameState == STATE_END_SCREEN) {
+                // Handle navigation in end screen
+                switch(event.key.keysym.sym) {
+                    case SDLK_UP:
+                    case SDLK_DOWN:
+                        // Toggle between the two options
+                        selectedEndOption = (selectedEndOption == END_RESTART) ? END_MAIN_MENU : END_RESTART;
+                        endHighlightActive = true;
+                        updateEndScreen();
+                        break;
+                    case SDLK_RETURN:
+                    case SDLK_SPACE:
+                        // Handle selection directly
+                        if (selectedEndOption == END_RESTART) {
+                            // Set variables for restart
+                            gameOver = false;
+                            playerWon = false;
+                            collectedClues = 0;
+                            damageTimer = 1.0f;
+                            objectCollisionDelay = 1.0f;
+                            objectCollisionsEnabled = false;
+                            questionActive = false;
+                            pendingClueEntity = nullptr;
+                            showFeedback = false;
+                            showingExitInstructions = false;
+                            level4MapChanged = false;
+                            finalBossDefeated = false;
+                            scientistRescued = false;
+                            canRescueScientist = false;
+                            currentLevel = 1;
+                            
+                            // Reset used questions
+                            resetUsedQuestions();
+                            
+                            // Set clue count for level 1
+                            totalClues = 3;
+                            
+                            // Reset position tracking
+                            positionManager.resetPositions();
+                            
+                            // Reset gameplay timer
+                            gameStartTime = SDL_GetTicks();
+                            gameplayTime = 0;
+                            
+                            // Set flag for deferred restart
+                            needsRestart = true;
+                        } else if (selectedEndOption == END_MAIN_MENU) {
+                            // Set flag for deferred return to main menu
+                            returnToMainMenu = true;
+                        }
+                        break;
+                    case SDLK_ESCAPE:
+                        // Go to main menu directly
+                        returnToMainMenu = true;
+                        break;
                 }
             }
             break;
@@ -535,6 +578,46 @@ void Game::handleEvents()
                     }
                 }
             }
+            else if (gameState == STATE_END_SCREEN) {
+                // First reset hover states on all end screen items
+                bool anyHovered = false;
+                int mouseX = event.motion.x;
+                int mouseY = event.motion.y;
+                
+                // Handle individual hover events
+                if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
+                    bool isOver = endRestartButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedEndOption = END_RESTART;
+                        endHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
+                    bool isOver = endMenuButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedEndOption = END_MAIN_MENU;
+                        endHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                // If no items are being hovered and we previously had highlights active
+                if (!anyHovered && endHighlightActive) {
+                    endHighlightActive = false; // Disable highlights when not hovering
+                    updateEndScreen(); // Update to show no highlights
+                } else if (anyHovered) {
+                    // Process hover effects
+                    if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
+                        endRestartButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                    
+                    if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
+                        endMenuButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                }
+            }
             break;
             
         case SDL_MOUSEBUTTONDOWN:
@@ -552,6 +635,16 @@ void Game::handleEvents()
                     menuExitButton->getComponent<UILabel>().HandleEvent(event);
                 }
             }
+            else if (gameState == STATE_END_SCREEN) {
+                // Handle mouse clicks for end screen buttons
+                if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
+                    endRestartButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
+                    endMenuButton->getComponent<UILabel>().HandleEvent(event);
+                }
+            }
             break;
             
         default:
@@ -565,10 +658,63 @@ void Game::update()
     float deltaTime = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
     
+    // Handle deferred restart and main menu return
+    if (needsRestart) {
+        needsRestart = false; // Reset flag
+        
+        // Clean up game entities
+        if (map != nullptr) {
+            delete map;
+            map = nullptr;
+        }
+        
+        // Clear all entities including UI
+        manager.clear();
+        
+        // Set game state
+        gameState = STATE_GAME;
+        
+        // Load first level
+        loadLevel(currentLevel);
+        
+        // Reinitialize all game entities
+        initEntities();
+        
+        // Return early to avoid processing other game logic
+        return;
+    }
+    
+    if (returnToMainMenu) {
+        returnToMainMenu = false; // Reset flag
+        
+        // Clean up game entities
+        if (map != nullptr) {
+            delete map;
+            map = nullptr;
+        }
+        
+        // Clear all entities
+        manager.clear();
+        
+        // Set the game state
+        gameState = STATE_MAIN_MENU;
+        
+        // Initialize main menu
+        initMainMenu();
+        
+        // Return early to avoid processing other game logic
+        return;
+    }
+    
     // Handle updates based on current game state
     switch (gameState) {
         case STATE_MAIN_MENU:
             // Nothing to update in the main menu except UI
+            break;
+            
+        case STATE_END_SCREEN:
+            // Update end screen elements
+            updateEndScreen();
             break;
             
         case STATE_GAME:
@@ -822,7 +968,7 @@ void Game::update()
                 if (currentLevel == 4 && e == finalBoss) {
                     finalBossDefeated = true;
                     // Show boss defeated message
-                    feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the scientist!", "font1", {255, 215, 0, 255});
+                    feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the SUPERUM!", "font1", {255, 215, 0, 255});
                     
                     // Position the feedback at the bottom of the screen
                     int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
@@ -868,22 +1014,8 @@ void Game::update()
 
         // Check if player is dead
         if(player->getComponent<HealthComponent>().health <= 0) {
-            // Show game over message
-            gameover->getComponent<UILabel>().SetLabelText("GAME OVER! Press R to restart or ESC to exit", "font2");
-            
-            // Center the game over text
-            int textWidth = gameover->getComponent<UILabel>().GetWidth();
-            int textHeight = gameover->getComponent<UILabel>().GetHeight();
-            
-            int xPos = (1920 - textWidth) / 2;
-            int yPos = (1080 - textHeight) / 2;
-            
-            gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-            
-            // Hide UI elements except game over message
-            healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-            ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-            clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+            // Destroy player
+            player->destroy();
             
             // Reset all enemy animations to idle
             for(auto& e : *enemies) {
@@ -892,9 +1024,12 @@ void Game::update()
                 }
             }
             
-            player->destroy();
+            // Mark game as over
             gameOver = true;
             playerWon = false;
+            
+            // Show end screen with defeat
+            initEndScreen(false);
             return;
         }
 
@@ -944,110 +1079,12 @@ void Game::update()
                 // Check if player is at the pyramid entrance
                 if ((playerX >= 24 && playerX <= 26) && (playerY >= 19 && playerY <= 20)) {
                     // Player has reached the pyramid, proceed to next level or win
-                    if (currentLevel < maxLevels) {
-                        // Advance to next level
-                        advanceToNextLevel();
-                    } else {
-                        // Show final win message if all levels completed
-                        gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
-                        
-                        // Center the win text
-                        int textWidth = gameover->getComponent<UILabel>().GetWidth();
-                        int textHeight = gameover->getComponent<UILabel>().GetHeight();
-                        
-                        int xPos = (1920 - textWidth) / 2;
-                        int yPos = (1080 - textHeight) / 2;
-                        
-                        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-                        
-                        // Hide UI elements except game over message
-                        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-                        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-                        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-                        
-                        // Reset all enemy animations to idle
-                        for(auto& e : *enemies) {
-                            if(e->hasComponent<SpriteComponent>()) {
-                                e->getComponent<SpriteComponent>().Play("Idle");
-                            }
-                        }
-                        
-                        player->destroy();
-                        gameOver = true;
-                        playerWon = true;
-                    }
-                }
-            } else if (currentLevel == 4 && level4MapChanged) {
-                // For level 4, check if player has reached the new exit at a specific position
-                float playerX = player->getComponent<TransformComponent>().position.x / 64;
-                float playerY = player->getComponent<TransformComponent>().position.y / 64;
-                
-                // Check if player is at the new exit (adjust coordinates as needed)
-                if ((playerX >= 28 && playerX <= 32) && (playerY >= 15 && playerY <= 17)) {
-                    // Player has reached the secret exit, show final win message
-                    gameover->getComponent<UILabel>().SetLabelText("CONGRATULATIONS! You found the secret exit! Press R to restart or ESC to exit", "font2");
-                    
-                    // Center the win text
-                    int textWidth = gameover->getComponent<UILabel>().GetWidth();
-                    int textHeight = gameover->getComponent<UILabel>().GetHeight();
-                    
-                    int xPos = (1920 - textWidth) / 2;
-                    int yPos = (1080 - textHeight) / 2;
-                    
-                    gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-                    
-                    // Hide UI elements except game over message
-                    healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-                    ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-                    clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-                    
-                    // Reset all enemy animations to idle
-                    for(auto& e : *enemies) {
-                        if(e->hasComponent<SpriteComponent>()) {
-                            e->getComponent<SpriteComponent>().Play("Idle");
-                        }
-                    }
-                    
-                    player->destroy();
-                    gameOver = true;
-                    playerWon = true;
+                    advanceToNextLevel();
                 }
             } else {
                 // For other levels, check if player has gone far enough north
                 if (player->getComponent<TransformComponent>().position.y < 100) {
-                    // Player has gone north enough, proceed to next level
-                    if (currentLevel < maxLevels) {
-                        // Advance to next level
                         advanceToNextLevel();
-                    } else {
-                        // Show final win message if all levels completed
-                        gameover->getComponent<UILabel>().SetLabelText("YOU WIN! Press R to restart or ESC to exit", "font2");
-                        
-                        // Center the win text
-                        int textWidth = gameover->getComponent<UILabel>().GetWidth();
-                        int textHeight = gameover->getComponent<UILabel>().GetHeight();
-                        
-                        int xPos = (1920 - textWidth) / 2;
-                        int yPos = (1080 - textHeight) / 2;
-                        
-                        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
-                        
-                        // Hide UI elements except game over message
-                        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
-                        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
-                        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
-                        
-                        // Reset all enemy animations to idle
-                        for(auto& e : *enemies) {
-                            if(e->hasComponent<SpriteComponent>()) {
-                                e->getComponent<SpriteComponent>().Play("Idle");
-                            }
-                        }
-                        
-                        player->destroy();
-                        gameOver = true;
-                        playerWon = true;
-                    }
                 }
             }
         }
@@ -1067,8 +1104,12 @@ void Game::render()
             renderMainMenu();
             break;
             
+        case STATE_END_SCREEN:
+            renderEndScreen();
+            break;
+            
         case STATE_GAME:
-    SDL_RenderClear(renderer);
+            SDL_RenderClear(renderer);
     
     // If transitioning, only render the transition screen
             if (transitionManager.isTransitioning()) {
@@ -1104,23 +1145,28 @@ void Game::render()
         float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
         
         if (distance <= 100) { // Within interaction range
-            // Draw interaction prompt
+            // Draw interaction prompt with lower opacity background
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120); // Reduced opacity (120 instead of 200)
             
-            // Calculate prompt position (above scientist)
-            int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + 16;
-            int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 30;
+            // Calculate prompt position (centered above scientist)
+            int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + (32 * 3) / 2; // Center on sprite (32px width * 3 scale)
+            int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 50; // Moved up a bit more
             
-            // Create temporary label for prompt
-            SDL_Rect promptRect = {promptX - 50, promptY - 15, 100, 30};
+            // Create a wider background rect for prompt
+            SDL_Rect promptRect = {promptX - 75, promptY - 15, 150, 35}; // Wider by 30px (15px on each side)
             SDL_RenderFillRect(renderer, &promptRect);
+            
+            // Add a subtle border to the prompt
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 80); // Very transparent white
+            SDL_RenderDrawRect(renderer, &promptRect); // Just the outline
             
             // Set up temporary label for "Press E"
             static Entity* promptLabel = nullptr;
             if (promptLabel == nullptr) {
                 promptLabel = &manager.addEntity();
-                promptLabel->addComponent<UILabel>(0, 0, "Press E", "font1", white);
+                SDL_Color dimWhite = {220, 220, 220, 255}; // Slightly dimmer text
+                promptLabel->addComponent<UILabel>(0, 0, "Press E", "font1", dimWhite);
             }
             
             // Position the prompt
@@ -1564,4 +1610,139 @@ void Game::loadGame() {
     // In a real implementation, this would load saved game data
     std::cout << "Load game not implemented yet. Starting new game instead." << std::endl;
     startGame();
+}
+
+void Game::initEndScreen(bool victory) {
+    // Reset selection and hover states
+    selectedEndOption = END_RESTART; // Default selection
+    endOptionSelected = false;
+    endHighlightActive = false; // Start with no highlights
+    
+    // Create end screen entity objects
+    endTitle = &manager.addEntity();
+    endMessage = &manager.addEntity();
+    endRestartButton = &manager.addEntity();
+    endMenuButton = &manager.addEntity();
+    
+    // Set up UI components with appropriate text
+    endTitle->addComponent<UILabel>(0, 150, victory ? "VICTORY!" : "GAME OVER", "font2", victory ? green : red);
+    
+    std::string message = victory ? 
+        "You have rescued the scientist and completed your mission!" : 
+        "You failed to complete your mission. Better luck next time!";
+    endMessage->addComponent<UILabel>(0, 300, message, "font1", white);
+    
+    endRestartButton->addComponent<UILabel>(0, 450, "RESTART GAME", "font1", white);
+    endMenuButton->addComponent<UILabel>(0, 530, "MAIN MENU", "font1", white);
+    
+    // Center all elements horizontally
+    int titleWidth = endTitle->getComponent<UILabel>().GetWidth();
+    int messageWidth = endMessage->getComponent<UILabel>().GetWidth();
+    int restartWidth = endRestartButton->getComponent<UILabel>().GetWidth();
+    int menuWidth = endMenuButton->getComponent<UILabel>().GetWidth();
+    
+    int titleX = (1920 - titleWidth) / 2;
+    int messageX = (1920 - messageWidth) / 2;
+    int restartX = (1920 - restartWidth) / 2;
+    int menuX = (1920 - menuWidth) / 2;
+    
+    endTitle->getComponent<UILabel>().SetPosition(titleX, 150);
+    endMessage->getComponent<UILabel>().SetPosition(messageX, 300);
+    endRestartButton->getComponent<UILabel>().SetPosition(restartX, 450);
+    endMenuButton->getComponent<UILabel>().SetPosition(menuX, 530);
+    
+    // Make buttons clickable
+    endRestartButton->getComponent<UILabel>().SetClickable(true);
+    endRestartButton->getComponent<UILabel>().SetOnClick([this]() { 
+        // Store gameState before clearing entities
+        GameState nextState = STATE_GAME;
+        
+        // First change all needed variables before destroying entities
+        gameOver = false;
+        playerWon = false;
+        collectedClues = 0;
+        damageTimer = 1.0f;
+        objectCollisionDelay = 1.0f;
+        objectCollisionsEnabled = false;
+        questionActive = false;
+        pendingClueEntity = nullptr;
+        showFeedback = false;
+        showingExitInstructions = false; // Reset exit instructions flag
+        level4MapChanged = false; // Reset level 4 map state
+        finalBossDefeated = false; // Reset final boss state
+        scientistRescued = false; // Reset scientist state
+        canRescueScientist = false; // Reset scientist interaction flag
+        currentLevel = 1;
+        
+        // Reset used questions when restarting the game
+        resetUsedQuestions();
+        
+        // Set clue count correctly for level 1
+        totalClues = 3; // Reset to default value, loadLevel will adjust if needed
+        
+        // Reset position tracking
+        positionManager.resetPositions();
+        
+        // Reset gameplay timer
+        gameStartTime = SDL_GetTicks();
+        gameplayTime = 0;
+        
+        // Use a simple flag to defer cleanup and state change
+        needsRestart = true;
+    });
+    endRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
+    endRestartButton->getComponent<UILabel>().ResetHoverState();
+    
+    endMenuButton->getComponent<UILabel>().SetClickable(true);
+    endMenuButton->getComponent<UILabel>().SetOnClick([this]() { 
+        // Set a flag to return to main menu after this frame
+        returnToMainMenu = true;
+    });
+    endMenuButton->getComponent<UILabel>().SetHoverColor(yellow);
+    endMenuButton->getComponent<UILabel>().ResetHoverState();
+    
+    // Change game state to end screen
+    gameState = STATE_END_SCREEN;
+}
+
+void Game::updateEndScreen() {
+    // Update button states based on selected option
+    if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
+        endRestartButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
+        endMenuButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    // Only highlight the selected item if highlight is active
+    if (endHighlightActive) {
+        switch (selectedEndOption) {
+            case END_RESTART:
+                if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
+                    endRestartButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case END_MAIN_MENU:
+                if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
+                    endMenuButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void Game::renderEndScreen() {
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black background
+    SDL_RenderClear(renderer);
+    
+    // Draw end screen elements
+    endTitle->draw();
+    endMessage->draw();
+    endRestartButton->draw();
+    endMenuButton->draw();
+    
+    SDL_RenderPresent(renderer);
 }

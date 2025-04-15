@@ -3,6 +3,7 @@
 #include "ECS.hpp"
 #include "Components.hpp"
 #include "../Vector2D.hpp"
+#include "../Game.hpp"
 
 class EnemyAIComponent : public Component {
     public:
@@ -46,6 +47,9 @@ class EnemyAIComponent : public Component {
                 transform->velocity.y = 0;
                 return;
             }
+
+            // Store current position for collision detection
+            Vector2D previousPosition = transform->position;
 
             auto& player = players[0];
             Vector2D playerPos = player->getComponent<TransformComponent>().position;
@@ -166,6 +170,37 @@ class EnemyAIComponent : public Component {
                     } else {
                         sprite->SetFlip(SDL_FLIP_HORIZONTAL);
                         lastFlip = SDL_FLIP_HORIZONTAL;
+                    }
+                }
+            }
+            
+            // Check collision with terrain only if the enemy has moved
+            if (isMoving) {
+                // Update enemy collider with new position
+                if (entity->hasComponent<ColliderComponent>()) {
+                    entity->getComponent<ColliderComponent>().update();
+                    
+                    // Get the updated collider
+                    SDL_Rect enemyCol = entity->getComponent<ColliderComponent>().collider;
+                    
+                    // Get all terrain colliders
+                    auto& colliders = manager.getGroup(Game::groupColliders);
+                    
+                    // Check for collisions with any terrain
+                    for (auto& c : colliders) {
+                        SDL_Rect terrainCol = c->getComponent<ColliderComponent>().collider;
+                        
+                        // If collision detected, revert to previous position
+                        if (Collision::AABB(enemyCol, terrainCol)) {
+                            // Restore previous position
+                            transform->position = previousPosition;
+                            
+                            // Update collider with reverted position
+                            entity->getComponent<ColliderComponent>().update();
+                            
+                            // No need to check other colliders once we've reverted
+                            break;
+                        }
                     }
                 }
             }
