@@ -19,6 +19,7 @@ class Map;
 // Extern declarations for global entities
 extern Entity* player;
 extern Entity* finalBoss; // Final boss entity for level 4
+extern Entity* scientist; // Scientist NPC for level 4
 
 // Game state enumeration 
 enum GameState {
@@ -88,6 +89,8 @@ class Game {
         static GameState gameState;          // Current game state
         static bool level4MapChanged;        // Tracks if Level 4 map has been changed
         static bool finalBossDefeated;       // Tracks if the final boss has been defeated
+        static bool scientistRescued;        // Tracks if the scientist has been rescued
+        static bool canRescueScientist;      // Tracks if player can interact with scientist
 
         // Timer related methods and variables
         static Uint32 gameStartTime;
@@ -105,7 +108,8 @@ class Game {
             groupColliders,
             groupProjectiles,
             groupObjects,
-            groupUI
+            groupUI,
+            groupNPCs
         };
 
     private:

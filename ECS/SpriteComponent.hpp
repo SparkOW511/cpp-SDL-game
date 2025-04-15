@@ -48,6 +48,7 @@ class SpriteComponent : public Component {
             animated = isAnimated;
 
             Animation idle = Animation(0, 3, 100);
+            Animation locked = Animation(1, 3, 100);
             Animation walk = Animation(1, 8, 100);
             Animation walkDown = Animation(2, 5, 100);
             Animation walkUp = Animation(3, 5, 100);
@@ -61,6 +62,7 @@ class SpriteComponent : public Component {
             Animation healthpotion = Animation(0, 8, 150);
 
             animations.emplace("Idle", idle);
+            animations.emplace("Locked", locked);
             animations.emplace("Walk", walk);
             animations.emplace("WalkDown", walkDown);
             animations.emplace("WalkUp", walkUp);

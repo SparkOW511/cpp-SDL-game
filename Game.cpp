@@ -22,6 +22,7 @@ Entity* ammobar = nullptr;
 Entity* gameover = nullptr;
 Entity* clueCounter = nullptr;
 Entity* feedbackLabel = nullptr;
+Entity* scientist = nullptr; // Scientist NPC for level 4
 
 // Global entity groups
 std::vector<Entity*>* tiles;
@@ -62,6 +63,8 @@ int Game::maxLevels = 4; // Set the maximum number of levels here
 bool Game::showingExitInstructions = false; // Initialize to false
 bool Game::level4MapChanged = false; // Initialize level4MapChanged
 bool Game::finalBossDefeated = false; // Initialize finalBossDefeated
+bool Game::scientistRescued = false; // Initialize scientistRescued
+bool Game::canRescueScientist = false; // Initialize canRescueScientist
 GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
 
 // Initialize timer variables
@@ -216,8 +219,20 @@ void Game::initEntities() {
         finalBoss->addComponent<EnemyAIComponent>(manager);
         finalBoss->getComponent<EnemyAIComponent>().setSpeed(0.5f); // Slower but stronger
         finalBoss->addGroup(Game::groupEnemies);
+        
+        // Create the scientist at position (35,5)
+        scientist = &manager.addEntity();
+        Vector2D scientistPos = {35*64, 5*64};
+        scientist->addComponent<TransformComponent>(scientistPos.x, scientistPos.y, 32, 32, 3);
+        scientist->addComponent<SpriteComponent>("scientist", true);
+        scientist->addComponent<ColliderComponent>("scientist");
+        scientist->getComponent<SpriteComponent>().Play("Locked"); // Use regular Idle animation since we don't have specific scientist animations
+        scientist->addGroup(Game::groupObjects); // Add to objects group so it's visible
+        
+        std::cout << "Scientist created at position: " << scientistPos.x/64 << "," << scientistPos.y/64 << std::endl;
     } else {
         finalBoss = nullptr; // Clear final boss pointer for other levels
+        scientist = nullptr; // Clear scientist pointer for other levels
     }
     
     for (int i = 0; i < numEnemies; i++) {
@@ -285,16 +300,17 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddTexture("terrainlvl3", "./assets/lvl3/TerrainTexturesLevel3.png");
     assets->AddTexture("terrainlvl4", "./assets/lvl4/TerrainTexturesLevel4.png");
 
-    assets->AddTexture("player", "./assets/playeranimations.png");
-    assets->AddTexture("enemy", "./assets/enemyanimations.png");
-    assets->AddTexture("boss", "./assets/finalbossanimations.png");
+    assets->AddTexture("player", "./assets/entities/playeranimations.png");
+    assets->AddTexture("enemy", "./assets/entities/enemyanimations.png");
+    assets->AddTexture("boss", "./assets/entities/finalbossanimations.png");
+    assets->AddTexture("scientist", "./assets/entities/scientistanimations.png");
 
-    assets->AddTexture("clue", "./assets/clue.png");
-    assets->AddTexture("magazine", "./assets/magazine.png");
-    assets->AddTexture("bulletHorizontal", "./assets/bulletHorizontal.png");
-    assets->AddTexture("bulletVertical", "./assets/bulletVertical.png");
-    assets->AddTexture("healthpotion", "./assets/healthpotion.png");
-    assets->AddTexture("cactus", "./assets/cactus.png");
+    assets->AddTexture("clue", "./assets/objects/clue.png");
+    assets->AddTexture("magazine", "./assets/objects/magazine.png");
+    assets->AddTexture("bulletHorizontal", "./assets/projectiles/bulletHorizontal.png");
+    assets->AddTexture("bulletVertical", "./assets/projectiles/bulletVertical.png");
+    assets->AddTexture("healthpotion", "./assets/objects/healthpotion.png");
+    assets->AddTexture("cactus", "./assets/objects/cactus.png");
     
     // Load fonts
     assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
@@ -404,21 +420,63 @@ void Game::handleEvents()
                         break;
                 }
             }
-            else if (gameState == STATE_GAME && event.key.keysym.sym == SDLK_ESCAPE) {
-                // Return to main menu
-                gameState = STATE_MAIN_MENU;
-                
-                // Clean up game entities
-                if (map != nullptr) {
-                    delete map;
-                    map = nullptr;
+            else if (gameState == STATE_GAME) {
+                if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    // Return to main menu
+                    gameState = STATE_MAIN_MENU;
+                    
+                    // Clean up game entities
+                    if (map != nullptr) {
+                        delete map;
+                        map = nullptr;
+                    }
+                    
+                    // Clear all entities
+                    manager.clear();
+                    
+                    // Initialize main menu
+                    initMainMenu();
                 }
-                
-                // Clear all entities
-                manager.clear();
-                
-                // Initialize main menu
-                initMainMenu();
+                // Handle 'E' key press for scientist interaction
+                else if (event.key.keysym.sym == SDLK_e && currentLevel == 4 && canRescueScientist && !scientistRescued && scientist != nullptr) {
+                    // Check if player is close enough to scientist
+                    Vector2D playerPos = player->getComponent<TransformComponent>().position;
+                    Vector2D scientistPos = scientist->getComponent<TransformComponent>().position;
+                    float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
+                    
+                    if (distance <= 100) { // Within interaction range
+                        // Change scientist animation to idle
+                        scientist->getComponent<SpriteComponent>().Play("Idle");
+                        scientistRescued = true;
+                        
+                        // Show game completion screen
+                        gameover->getComponent<UILabel>().SetLabelText("MISSION COMPLETE! Scientist rescued! Press R to restart or ESC to exit", "font2");
+                        
+                        // Center the win text
+                        int textWidth = gameover->getComponent<UILabel>().GetWidth();
+                        int textHeight = gameover->getComponent<UILabel>().GetHeight();
+                        
+                        int xPos = (1920 - textWidth) / 2;
+                        int yPos = (1080 - textHeight) / 2;
+                        
+                        gameover->getComponent<UILabel>().SetPosition(xPos, yPos);
+                        
+                        // Hide UI elements except game over message
+                        healthbar->getComponent<UILabel>().SetLabelText("", "font1");
+                        ammobar->getComponent<UILabel>().SetLabelText("", "font1");
+                        clueCounter->getComponent<UILabel>().SetLabelText("", "font1");
+                        
+                        // Reset all enemy animations to idle
+                        for(auto& e : *enemies) {
+                            if(e->hasComponent<SpriteComponent>()) {
+                                e->getComponent<SpriteComponent>().Play("Idle");
+                            }
+                        }
+                        
+                        gameOver = true;
+                        playerWon = true;
+                    }
+                }
             }
             break;
             
@@ -764,7 +822,7 @@ void Game::update()
                 if (currentLevel == 4 && e == finalBoss) {
                     finalBossDefeated = true;
                     // Show boss defeated message
-                    feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed!", "font1", {255, 215, 0, 255});
+                    feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the scientist!", "font1", {255, 215, 0, 255});
                     
                     // Position the feedback at the bottom of the screen
                     int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
@@ -774,6 +832,9 @@ void Game::update()
                     // Show feedback
                     showFeedback = true;
                     feedbackStartTime = SDL_GetTicks();
+                    
+                    // Enable scientist rescue interaction
+                    canRescueScientist = true;
                     
                     // Change the map to reveal the exit
                     level4MapChanged = true;
@@ -1023,12 +1084,54 @@ void Game::render()
     for(auto& o : *objects) o->draw();
     for(auto& p : *projectiles) p->draw();
     
+    // Ensure scientist is drawn if it exists
+    if (scientist != nullptr && scientist->isActive()) {
+        scientist->draw();
+    }
+    
     // Always render UI elements
     healthbar->draw();
     ammobar->draw();
     clueCounter->draw();
     timerLabel->draw();
     gameover->draw();
+    
+    // Show interaction prompt for scientist if player is close
+    if (currentLevel == 4 && canRescueScientist && !scientistRescued && 
+        player != nullptr && scientist != nullptr) {
+        Vector2D playerPos = player->getComponent<TransformComponent>().position;
+        Vector2D scientistPos = scientist->getComponent<TransformComponent>().position;
+        float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
+        
+        if (distance <= 100) { // Within interaction range
+            // Draw interaction prompt
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+            
+            // Calculate prompt position (above scientist)
+            int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + 16;
+            int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 30;
+            
+            // Create temporary label for prompt
+            SDL_Rect promptRect = {promptX - 50, promptY - 15, 100, 30};
+            SDL_RenderFillRect(renderer, &promptRect);
+            
+            // Set up temporary label for "Press E"
+            static Entity* promptLabel = nullptr;
+            if (promptLabel == nullptr) {
+                promptLabel = &manager.addEntity();
+                promptLabel->addComponent<UILabel>(0, 0, "Press E", "font1", white);
+            }
+            
+            // Position the prompt
+            int labelWidth = promptLabel->getComponent<UILabel>().GetWidth();
+            promptLabel->getComponent<UILabel>().SetPosition(promptX - labelWidth/2, promptY - 10);
+            promptLabel->draw();
+            
+            // Reset draw color
+            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        }
+    }
     
     // Draw feedback if active (for both question feedback and exit instructions)
     if (showFeedback && feedbackLabel != nullptr) {
@@ -1096,6 +1199,8 @@ void Game::restart() {
     showingExitInstructions = false; // Reset exit instructions flag
     level4MapChanged = false; // Reset level 4 map state
     finalBossDefeated = false; // Reset final boss state
+    scientistRescued = false; // Reset scientist state
+    canRescueScientist = false; // Reset scientist interaction flag
     currentLevel = 1;
     gameState = STATE_GAME; // Ensure we're in game state
     
