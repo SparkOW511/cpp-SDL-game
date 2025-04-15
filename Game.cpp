@@ -222,7 +222,7 @@ void Game::initEntities() {
         
         // Create the scientist at position (35,5)
         scientist = &manager.addEntity();
-        Vector2D scientistPos = {35*64, 5*64};
+        Vector2D scientistPos = {34*64, 3*64};
         scientist->addComponent<TransformComponent>(scientistPos.x, scientistPos.y, 32, 32, 3);
         scientist->addComponent<SpriteComponent>("scientist", true);
         scientist->addComponent<ColliderComponent>("scientist");
