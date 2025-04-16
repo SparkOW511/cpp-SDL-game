@@ -26,6 +26,7 @@ enum GameState {
     STATE_MAIN_MENU,
     STATE_GAME,
     STATE_PAUSE,
+    STATE_SETTINGS,
     STATE_GAME_OVER,
     STATE_END_SCREEN
 };
@@ -34,13 +35,33 @@ enum GameState {
 enum MenuItem {
     MENU_NEW_GAME,
     MENU_LOAD_GAME,
+    MENU_SETTINGS,     // Add settings option
+    MENU_LEADERBOARD,  // Add leaderboard option
     MENU_EXIT,
     MENU_ITEMS_COUNT
+};
+
+// Pause menu items
+enum PauseMenuItem {
+    PAUSE_RESUME,
+    PAUSE_SAVE,
+    PAUSE_RESTART,
+    PAUSE_SETTINGS,
+    PAUSE_MAIN_MENU,
+    PAUSE_ITEMS_COUNT
+};
+
+// Settings menu items
+enum SettingsMenuItem {
+    SETTINGS_VOLUME,
+    SETTINGS_BACK,
+    SETTINGS_ITEMS_COUNT
 };
 
 // End screen options
 enum EndScreenOption {
     END_RESTART,
+    END_REPLAY,  // Add replay option
     END_MAIN_MENU,
     END_OPTIONS_COUNT
 };
@@ -57,6 +78,7 @@ class Game {
         void render();
         void clean();
         void restart();
+        void replay(); // New function for replaying the current level
         void initEntities();
         bool running() { return isRunning; }
         
@@ -79,6 +101,19 @@ class Game {
         void initEndScreen(bool victory);
         void updateEndScreen();
         void renderEndScreen();
+
+        // Pause menu methods
+        void initPauseMenu();
+        void updatePauseMenu();
+        void renderPauseMenu();
+        void togglePause();
+        void saveGame(); // Stub for now
+        
+        // Settings menu methods
+        void initSettingsMenu();
+        void updateSettingsMenu();
+        void renderSettingsMenu();
+        void applySettings();
 
         static SDL_Renderer *renderer;
         static SDL_Event event;
@@ -127,6 +162,9 @@ class Game {
             groupNPCs
         };
 
+        // Volume settings (0-100)
+        static int volumeLevel;
+
     private:
         int count = 0;
         Uint32 lastTime = 0;
@@ -142,7 +180,9 @@ class Game {
         // Main menu entities
         Entity* menuTitle = nullptr;
         Entity* menuNewGameButton = nullptr;
-        Entity* menuLoadGameButton = nullptr;  
+        Entity* menuLoadGameButton = nullptr;
+        Entity* menuSettingsButton = nullptr;  // Add settings button entity
+        Entity* menuLeaderboardButton = nullptr;  // Add leaderboard button entity
         Entity* menuExitButton = nullptr;
         Entity* menuBackground = nullptr;
         
@@ -160,6 +200,7 @@ class Game {
         Entity* endTitle = nullptr;
         Entity* endMessage = nullptr;
         Entity* endRestartButton = nullptr;
+        Entity* endReplayButton = nullptr;  // Add replay button
         Entity* endMenuButton = nullptr;
         
         // Managers
@@ -184,5 +225,52 @@ class Game {
 
         // Reset question tracking when restarting or changing levels
         void resetUsedQuestions() { usedQuestions.clear(); }
+
+        // Pause menu entities
+        Entity* pauseTitle = nullptr;
+        Entity* pauseResumeButton = nullptr;
+        Entity* pauseSaveButton = nullptr;
+        Entity* pauseRestartButton = nullptr;
+        Entity* pauseSettingsButton = nullptr;
+        Entity* pauseMainMenuButton = nullptr;
+        Entity* pauseBackground = nullptr;
+        
+        // Pause menu state tracking
+        int selectedPauseItem = PAUSE_RESUME; // Default to Resume
+        bool pauseItemSelected = false;
+        bool pauseHighlightActive = false;
+        
+        // Settings menu entities
+        Entity* settingsTitle = nullptr;
+        Entity* volumeSlider = nullptr;
+        Entity* volumeLabel = nullptr;
+        Entity* keybindsLabel = nullptr;
+        Entity* settingsBackButton = nullptr;
+        Entity* settingsBackground = nullptr;
+        
+        // Settings menu state tracking
+        int selectedSettingsItem = SETTINGS_VOLUME;
+        bool settingsItemSelected = false;
+        bool settingsHighlightActive = false;
+        bool draggingVolumeSlider = false;
+        
+        // Keybind information to display
+        struct KeybindInfo {
+            std::string action;
+            std::string key;
+        };
+        
+        std::vector<KeybindInfo> keybinds = {
+            {"Move Up", "W"},
+            {"Move Down", "S"},
+            {"Move Left", "A"},
+            {"Move Right", "D"},
+            {"Shoot", "Left Mouse"},
+            {"Interact", "E"},
+            {"Pause", "ESC"}
+        };
+
+        // Add a variable to track where to return from settings
+        GameState previousState = STATE_MAIN_MENU; // Default to main menu
 };
 #endif

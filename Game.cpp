@@ -68,6 +68,7 @@ bool Game::canRescueScientist = false; // Initialize canRescueScientist
 bool Game::needsRestart = false; // Initialize needsRestart flag
 bool Game::returnToMainMenu = false; // Initialize returnToMainMenu flag
 GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
+int Game::volumeLevel = 80; // Default volume level at 80%
 
 // Initialize timer variables
 Uint32 Game::gameStartTime = 0;
@@ -78,6 +79,8 @@ Entity* Game::timerLabel = nullptr;
 Entity* menuTitle = nullptr;
 Entity* menuNewGameButton = nullptr;
 Entity* menuLoadGameButton = nullptr;
+Entity* menuSettingsButton = nullptr;  // Add settings button
+Entity* menuLeaderboardButton = nullptr;  // Add leaderboard button
 Entity* menuExitButton = nullptr;
 int selectedMenuItem = MENU_NEW_GAME;
 bool menuHighlightActive = false;
@@ -87,10 +90,35 @@ bool menuItemSelected = false;
 Entity* endTitle = nullptr;
 Entity* endMessage = nullptr;
 Entity* endRestartButton = nullptr;
+Entity* endReplayButton = nullptr;  // Add replay button
 Entity* endMenuButton = nullptr;
 int selectedEndOption = END_RESTART;
 bool endOptionSelected = false;
 bool endHighlightActive = false;
+
+// Pause menu variables
+Entity* pauseTitle = nullptr;
+Entity* pauseResumeButton = nullptr;
+Entity* pauseSaveButton = nullptr;
+Entity* pauseRestartButton = nullptr;
+Entity* pauseSettingsButton = nullptr;
+Entity* pauseMainMenuButton = nullptr;
+Entity* pauseBackground = nullptr;
+int selectedPauseItem = PAUSE_RESUME;
+bool pauseHighlightActive = false;
+bool pauseItemSelected = false;
+
+// Settings menu variables
+Entity* settingsTitle = nullptr;
+Entity* volumeSlider = nullptr;
+Entity* volumeLabel = nullptr;
+Entity* keybindsLabel = nullptr;
+Entity* settingsBackButton = nullptr;
+Entity* settingsBackground = nullptr;
+int selectedSettingsItem = SETTINGS_VOLUME;
+bool settingsHighlightActive = false;
+bool settingsItemSelected = false;
+bool draggingVolumeSlider = false;
 
 Game::Game()
 {
@@ -385,6 +413,14 @@ void Game::handleEvents()
                             case MENU_LOAD_GAME:
                                 loadGame();
                                 break;
+                            case MENU_SETTINGS:
+                                gameState = STATE_SETTINGS;
+                                initSettingsMenu();
+                                break;
+                            case MENU_LEADERBOARD:
+                                // Leaderboard function currently does nothing
+                                // Will be implemented later
+                                break;
                             case MENU_EXIT:
                                 isRunning = false;
                                 break;
@@ -432,20 +468,8 @@ void Game::handleEvents()
             }
             else if (gameState == STATE_GAME) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    // Return to main menu
-                    gameState = STATE_MAIN_MENU;
-                    
-                    // Clean up game entities
-                    if (map != nullptr) {
-                        delete map;
-                        map = nullptr;
-                    }
-                    
-                    // Clear all entities
-                    manager.clear();
-                    
-                    // Initialize main menu
-                    initMainMenu();
+                    // Toggle pause menu instead of returning to main menu
+                    togglePause();
                 }
                 // Handle 'E' key press for scientist interaction
                 else if (event.key.keysym.sym == SDLK_e && currentLevel == 4 && canRescueScientist && !scientistRescued && scientist != nullptr) {
@@ -462,6 +486,91 @@ void Game::handleEvents()
                         // Initialize the end screen with victory
                         initEndScreen(true);
                     }
+                }
+            }
+            else if (gameState == STATE_PAUSE) {
+                // Handle navigation in pause menu
+                switch(event.key.keysym.sym) {
+                    case SDLK_UP:
+                        selectedPauseItem = (selectedPauseItem - 1 + PAUSE_ITEMS_COUNT) % PAUSE_ITEMS_COUNT;
+                        pauseHighlightActive = true;
+                        updatePauseMenu();
+                        break;
+                    case SDLK_DOWN:
+                        selectedPauseItem = (selectedPauseItem + 1) % PAUSE_ITEMS_COUNT;
+                        pauseHighlightActive = true;
+                        updatePauseMenu();
+                        break;
+                    case SDLK_RETURN:
+                    case SDLK_SPACE:
+                        // Handle selection
+                        switch(selectedPauseItem) {
+                            case PAUSE_RESUME:
+                                togglePause(); // Resume game
+                                break;
+                            case PAUSE_SAVE:
+                                saveGame(); // Save game (stub)
+                                break;
+                            case PAUSE_RESTART:
+                                // Set restart flag and unpause
+                                needsRestart = true;
+                                gameState = STATE_GAME;
+                                break;
+                            case PAUSE_SETTINGS:
+                                // Go to settings menu
+                                gameState = STATE_SETTINGS;
+                                initSettingsMenu();
+                                break;
+                            case PAUSE_MAIN_MENU:
+                                // Return to main menu
+                                returnToMainMenu = true;
+                                break;
+                        }
+                        break;
+                    case SDLK_ESCAPE:
+                        // Resume game when pressing ESC in pause menu
+                        togglePause();
+                        break;
+                }
+            }
+            else if (gameState == STATE_SETTINGS) {
+                // Handle navigation in settings menu
+                switch(event.key.keysym.sym) {
+                    case SDLK_UP:
+                    case SDLK_DOWN:
+                        // Toggle between volume and back button
+                        selectedSettingsItem = (selectedSettingsItem == SETTINGS_VOLUME) ? 
+                                              SETTINGS_BACK : SETTINGS_VOLUME;
+                        settingsHighlightActive = true;
+                        updateSettingsMenu();
+                        break;
+                    case SDLK_LEFT:
+                        if (selectedSettingsItem == SETTINGS_VOLUME) {
+                            // Decrease volume
+                            volumeLevel = std::max(0, volumeLevel - 5);
+                            updateSettingsMenu();
+                        }
+                        break;
+                    case SDLK_RIGHT:
+                        if (selectedSettingsItem == SETTINGS_VOLUME) {
+                            // Increase volume
+                            volumeLevel = std::min(100, volumeLevel + 5);
+                            updateSettingsMenu();
+                        }
+                        break;
+                    case SDLK_RETURN:
+                    case SDLK_SPACE:
+                        if (selectedSettingsItem == SETTINGS_BACK) {
+                            // Return to previous state (main menu or pause)
+                            gameState = previousState;
+                            applySettings();
+                        }
+                        break;
+                    case SDLK_ESCAPE:
+                        // Return to previous state
+                        gameState = previousState;
+                        applySettings();
+                        break;
                 }
             }
             else if (gameState == STATE_END_SCREEN) {
@@ -488,11 +597,11 @@ void Game::handleEvents()
                             questionActive = false;
                             pendingClueEntity = nullptr;
                             showFeedback = false;
-                            showingExitInstructions = false;
-                            level4MapChanged = false;
-                            finalBossDefeated = false;
-                            scientistRescued = false;
-                            canRescueScientist = false;
+                            showingExitInstructions = false; // Reset exit instructions flag
+                            level4MapChanged = false; // Reset level 4 map state
+                            finalBossDefeated = false; // Reset final boss state
+                            scientistRescued = false; // Reset scientist state
+                            canRescueScientist = false; // Reset scientist interaction flag
                             currentLevel = 1;
                             
                             // Reset used questions
@@ -550,6 +659,24 @@ void Game::handleEvents()
                     }
                 }
                 
+                if (menuSettingsButton && menuSettingsButton->hasComponent<UILabel>()) {
+                    bool isOver = menuSettingsButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedMenuItem = MENU_SETTINGS;
+                        menuHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                if (menuLeaderboardButton && menuLeaderboardButton->hasComponent<UILabel>()) {
+                    bool isOver = menuLeaderboardButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedMenuItem = MENU_LEADERBOARD;
+                        menuHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
                 if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
                     bool isOver = menuExitButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
                     if (isOver) {
@@ -573,9 +700,141 @@ void Game::handleEvents()
                         menuLoadGameButton->getComponent<UILabel>().HandleEvent(event);
                     }
                     
+                    if (menuSettingsButton && menuSettingsButton->hasComponent<UILabel>()) {
+                        menuSettingsButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                    
+                    if (menuLeaderboardButton && menuLeaderboardButton->hasComponent<UILabel>()) {
+                        menuLeaderboardButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                    
                     if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
                         menuExitButton->getComponent<UILabel>().HandleEvent(event);
                     }
+                }
+            }
+            else if (gameState == STATE_PAUSE) {
+                // Handle pause menu mouse hover
+                bool anyHovered = false;
+                int mouseX = event.motion.x;
+                int mouseY = event.motion.y;
+                
+                // Check each pause menu button for hover
+                if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
+                    bool isOver = pauseResumeButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedPauseItem = PAUSE_RESUME;
+                        pauseHighlightActive = true;
+                    }
+                }
+                
+                if (pauseSaveButton && pauseSaveButton->hasComponent<UILabel>()) {
+                    bool isOver = pauseSaveButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedPauseItem = PAUSE_SAVE;
+                        pauseHighlightActive = true;
+                    }
+                }
+                
+                if (pauseRestartButton && pauseRestartButton->hasComponent<UILabel>()) {
+                    bool isOver = pauseRestartButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedPauseItem = PAUSE_RESTART;
+                        pauseHighlightActive = true;
+                    }
+                }
+                
+                if (pauseSettingsButton && pauseSettingsButton->hasComponent<UILabel>()) {
+                    bool isOver = pauseSettingsButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedPauseItem = PAUSE_SETTINGS;
+                        pauseHighlightActive = true;
+                    }
+                }
+                
+                if (pauseMainMenuButton && pauseMainMenuButton->hasComponent<UILabel>()) {
+                    bool isOver = pauseMainMenuButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedPauseItem = PAUSE_MAIN_MENU;
+                        pauseHighlightActive = true;
+                    }
+                }
+                
+                // Update hover states
+                if (!anyHovered && pauseHighlightActive) {
+                    pauseHighlightActive = false;
+                    updatePauseMenu();
+                } else if (anyHovered) {
+                    updatePauseMenu();
+                }
+            }
+            else if (gameState == STATE_SETTINGS) {
+                // Handle settings menu mouse hover
+                bool anyHovered = false;
+                int mouseX = event.motion.x;
+                int mouseY = event.motion.y;
+                
+                // Check for volume slider hover and drag
+                int screenCenter = 1920 / 2;
+                int sliderWidth = 400;
+                int sliderHeight = 20;
+                int sliderX = screenCenter - (sliderWidth / 2);
+                int sliderY = 340;
+                
+                SDL_Rect sliderArea = {sliderX - 10, sliderY - 10, sliderWidth + 20, sliderHeight + 20};
+                bool isOverSlider = mouseX >= sliderArea.x && mouseX <= sliderArea.x + sliderArea.w &&
+                                  mouseY >= sliderArea.y && mouseY <= sliderArea.y + sliderArea.h;
+                
+                if (isOverSlider || draggingVolumeSlider) {
+                    anyHovered = true;
+                    selectedSettingsItem = SETTINGS_VOLUME;
+                    settingsHighlightActive = true;
+                }
+                
+                if (settingsBackButton && settingsBackButton->hasComponent<UILabel>()) {
+                    bool isOver = settingsBackButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedSettingsItem = SETTINGS_BACK;
+                        settingsHighlightActive = true;
+                    }
+                    
+                    // Process hover effect for back button
+                    settingsBackButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                // Update volume if dragging
+                if (draggingVolumeSlider) {
+                    // Calculate volume based on mouse X position relative to slider
+                    if (mouseX < sliderX) {
+                        volumeLevel = 0;
+                    } else if (mouseX > sliderX + sliderWidth) {
+                        volumeLevel = 100;
+                    } else {
+                        volumeLevel = ((mouseX - sliderX) * 100) / sliderWidth;
+                    }
+                    
+                    // Update the volume label
+                    if (volumeLabel && volumeLabel->hasComponent<UILabel>()) {
+                        std::stringstream volSS;
+                        volSS << "Volume: " << volumeLevel << "%";
+                        volumeLabel->getComponent<UILabel>().SetLabelText(volSS.str(), "font1");
+                        
+                        // Center the updated label
+                        int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
+                        int volLabelX = (1920 - volLabelWidth) / 2;
+                        volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
+                    }
+                }
+                
+                // Update hover states
+                if (!anyHovered && settingsHighlightActive && !draggingVolumeSlider) {
+                    settingsHighlightActive = false;
                 }
             }
             else if (gameState == STATE_END_SCREEN) {
@@ -590,6 +849,15 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedEndOption = END_RESTART;
+                        endHighlightActive = true; // Enable highlighting when hovering
+                    }
+                }
+                
+                if (endReplayButton && endReplayButton->hasComponent<UILabel>()) {
+                    bool isOver = endReplayButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+                    if (isOver) {
+                        anyHovered = true;
+                        selectedEndOption = END_REPLAY;
                         endHighlightActive = true; // Enable highlighting when hovering
                     }
                 }
@@ -613,6 +881,10 @@ void Game::handleEvents()
                         endRestartButton->getComponent<UILabel>().HandleEvent(event);
                     }
                     
+                    if (endReplayButton && endReplayButton->hasComponent<UILabel>()) {
+                        endReplayButton->getComponent<UILabel>().HandleEvent(event);
+                    }
+                    
                     if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
                         endMenuButton->getComponent<UILabel>().HandleEvent(event);
                     }
@@ -631,8 +903,83 @@ void Game::handleEvents()
                     menuLoadGameButton->getComponent<UILabel>().HandleEvent(event);
                 }
                 
+                if (menuSettingsButton && menuSettingsButton->hasComponent<UILabel>()) {
+                    menuSettingsButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                if (menuLeaderboardButton && menuLeaderboardButton->hasComponent<UILabel>()) {
+                    menuLeaderboardButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
                 if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
                     menuExitButton->getComponent<UILabel>().HandleEvent(event);
+                }
+            }
+            else if (gameState == STATE_PAUSE) {
+                // Handle mouse clicks for pause menu buttons
+                if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
+                    pauseResumeButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                if (pauseSaveButton && pauseSaveButton->hasComponent<UILabel>()) {
+                    pauseSaveButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                if (pauseRestartButton && pauseRestartButton->hasComponent<UILabel>()) {
+                    pauseRestartButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                if (pauseSettingsButton && pauseSettingsButton->hasComponent<UILabel>()) {
+                    pauseSettingsButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
+                if (pauseMainMenuButton && pauseMainMenuButton->hasComponent<UILabel>()) {
+                    pauseMainMenuButton->getComponent<UILabel>().HandleEvent(event);
+                }
+            }
+            else if (gameState == STATE_SETTINGS) {
+                // Handle mouse clicks for settings menu
+                int mouseX = event.button.x;
+                int mouseY = event.button.y;
+                
+                // Check if clicking on volume slider
+                int screenCenter = 1920 / 2;
+                int sliderWidth = 400;
+                int sliderHeight = 20;
+                int sliderX = screenCenter - (sliderWidth / 2);
+                int sliderY = 340;
+                
+                SDL_Rect sliderArea = {sliderX - 10, sliderY - 10, sliderWidth + 20, sliderHeight + 20};
+                bool isOverSlider = mouseX >= sliderArea.x && mouseX <= sliderArea.x + sliderArea.w &&
+                                  mouseY >= sliderArea.y && mouseY <= sliderArea.y + sliderArea.h;
+                
+                if (isOverSlider) {
+                    draggingVolumeSlider = true;
+                    
+                    // Set volume immediately based on click position
+                    if (mouseX < sliderX) {
+                        volumeLevel = 0;
+                    } else if (mouseX > sliderX + sliderWidth) {
+                        volumeLevel = 100;
+                    } else {
+                        volumeLevel = ((mouseX - sliderX) * 100) / sliderWidth;
+                    }
+                    
+                    // Update the volume label
+                    if (volumeLabel && volumeLabel->hasComponent<UILabel>()) {
+                        std::stringstream volSS;
+                        volSS << "Volume: " << volumeLevel << "%";
+                        volumeLabel->getComponent<UILabel>().SetLabelText(volSS.str(), "font1");
+                        
+                        // Center the updated label
+                        int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
+                        int volLabelX = (1920 - volLabelWidth) / 2;
+                        volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
+                    }
+                }
+                
+                if (settingsBackButton && settingsBackButton->hasComponent<UILabel>()) {
+                    settingsBackButton->getComponent<UILabel>().HandleEvent(event);
                 }
             }
             else if (gameState == STATE_END_SCREEN) {
@@ -641,9 +988,19 @@ void Game::handleEvents()
                     endRestartButton->getComponent<UILabel>().HandleEvent(event);
                 }
                 
+                if (endReplayButton && endReplayButton->hasComponent<UILabel>()) {
+                    endReplayButton->getComponent<UILabel>().HandleEvent(event);
+                }
+                
                 if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
                     endMenuButton->getComponent<UILabel>().HandleEvent(event);
                 }
+            }
+            break;
+            
+        case SDL_MOUSEBUTTONUP:
+            if (gameState == STATE_SETTINGS && draggingVolumeSlider) {
+                draggingVolumeSlider = false;
             }
             break;
             
@@ -1154,6 +1511,14 @@ void Game::render()
             renderEndScreen();
             break;
             
+        case STATE_PAUSE:
+            renderPauseMenu();
+            break;
+            
+        case STATE_SETTINGS:
+            renderSettingsMenu();
+            break;
+            
         case STATE_GAME:
             SDL_RenderClear(renderer);
     
@@ -1523,29 +1888,39 @@ void Game::initMainMenu() {
     menuTitle = &manager.addEntity();
     menuNewGameButton = &manager.addEntity();
     menuLoadGameButton = &manager.addEntity();
+    menuSettingsButton = &manager.addEntity();  // Add settings button
+    menuLeaderboardButton = &manager.addEntity();  // Add leaderboard button
     menuExitButton = &manager.addEntity();
     
     // Set up UI components
     menuTitle->addComponent<UILabel>(0, 200, "Dejte mi RPA 3 prosm", "font2", white);
     menuNewGameButton->addComponent<UILabel>(0, 400, "NEW GAME", "font1", white);
-    menuLoadGameButton->addComponent<UILabel>(0, 480, "LOAD GAME", "font1", white);
-    menuExitButton->addComponent<UILabel>(0, 560, "EXIT", "font1", white);
+    menuLoadGameButton->addComponent<UILabel>(0, 450, "LOAD GAME", "font1", white);
+    menuSettingsButton->addComponent<UILabel>(0, 500, "SETTINGS", "font1", white);  // Add settings text
+    menuLeaderboardButton->addComponent<UILabel>(0, 550, "LEADERBOARD", "font1", white);  // Add leaderboard text
+    menuExitButton->addComponent<UILabel>(0, 600, "EXIT", "font1", white);  // Adjust position
     
     // Center the menu items horizontally
     int titleWidth = menuTitle->getComponent<UILabel>().GetWidth();
     int newGameWidth = menuNewGameButton->getComponent<UILabel>().GetWidth();
     int loadGameWidth = menuLoadGameButton->getComponent<UILabel>().GetWidth();
+    int settingsWidth = menuSettingsButton->getComponent<UILabel>().GetWidth();  // Get settings width
+    int leaderboardWidth = menuLeaderboardButton->getComponent<UILabel>().GetWidth();  // Get leaderboard width
     int exitWidth = menuExitButton->getComponent<UILabel>().GetWidth();
     
     int titleX = (1920 - titleWidth) / 2;
     int newGameX = (1920 - newGameWidth) / 2;
     int loadGameX = (1920 - loadGameWidth) / 2;
+    int settingsX = (1920 - settingsWidth) / 2;  // Calculate settings position
+    int leaderboardX = (1920 - leaderboardWidth) / 2;  // Calculate leaderboard position
     int exitX = (1920 - exitWidth) / 2;
     
     menuTitle->getComponent<UILabel>().SetPosition(titleX, 200);
     menuNewGameButton->getComponent<UILabel>().SetPosition(newGameX, 400);
-    menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 480);
-    menuExitButton->getComponent<UILabel>().SetPosition(exitX, 560);
+    menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 450);
+    menuSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 500);  // Position settings button
+    menuLeaderboardButton->getComponent<UILabel>().SetPosition(leaderboardX, 550);  // Position leaderboard button
+    menuExitButton->getComponent<UILabel>().SetPosition(exitX, 600);  // Adjust position
     
     // Make menu items clickable but ensure they're not hovered initially
     menuNewGameButton->getComponent<UILabel>().SetClickable(true);
@@ -1557,6 +1932,25 @@ void Game::initMainMenu() {
     menuLoadGameButton->getComponent<UILabel>().SetOnClick([this]() { loadGame(); });
     menuLoadGameButton->getComponent<UILabel>().SetHoverColor(yellow);
     menuLoadGameButton->getComponent<UILabel>().ResetHoverState();
+    
+    // Add settings button functionality
+    menuSettingsButton->getComponent<UILabel>().SetClickable(true);
+    menuSettingsButton->getComponent<UILabel>().SetOnClick([this]() { 
+        previousState = STATE_MAIN_MENU; // Store that we came from main menu
+        gameState = STATE_SETTINGS;
+        initSettingsMenu();
+    });
+    menuSettingsButton->getComponent<UILabel>().SetHoverColor(yellow);
+    menuSettingsButton->getComponent<UILabel>().ResetHoverState();
+    
+    // Add leaderboard button functionality
+    menuLeaderboardButton->getComponent<UILabel>().SetClickable(true);
+    menuLeaderboardButton->getComponent<UILabel>().SetOnClick([this]() { 
+        // This function currently does nothing
+        // Will be implemented later for the leaderboard
+    });
+    menuLeaderboardButton->getComponent<UILabel>().SetHoverColor(yellow);
+    menuLeaderboardButton->getComponent<UILabel>().ResetHoverState();
     
     menuExitButton->getComponent<UILabel>().SetClickable(true);
     menuExitButton->getComponent<UILabel>().SetOnClick([this]() { isRunning = false; });
@@ -1576,6 +1970,14 @@ void Game::updateMainMenu() {
         menuLoadGameButton->getComponent<UILabel>().ResetHoverState();
     }
     
+    if (menuSettingsButton && menuSettingsButton->hasComponent<UILabel>()) {
+        menuSettingsButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (menuLeaderboardButton && menuLeaderboardButton->hasComponent<UILabel>()) {
+        menuLeaderboardButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
     if (menuExitButton && menuExitButton->hasComponent<UILabel>()) {
         menuExitButton->getComponent<UILabel>().ResetHoverState();
     }
@@ -1591,6 +1993,16 @@ void Game::updateMainMenu() {
             case MENU_LOAD_GAME:
                 if (menuLoadGameButton && menuLoadGameButton->hasComponent<UILabel>()) {
                     menuLoadGameButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case MENU_SETTINGS:
+                if (menuSettingsButton && menuSettingsButton->hasComponent<UILabel>()) {
+                    menuSettingsButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case MENU_LEADERBOARD:
+                if (menuLeaderboardButton && menuLeaderboardButton->hasComponent<UILabel>()) {
+                    menuLeaderboardButton->getComponent<UILabel>().SetTextColor(yellow);
                 }
                 break;
             case MENU_EXIT:
@@ -1612,6 +2024,8 @@ void Game::renderMainMenu() {
     menuTitle->draw();
     menuNewGameButton->draw();
     menuLoadGameButton->draw();
+    menuSettingsButton->draw();    // Draw settings button
+    menuLeaderboardButton->draw(); // Draw leaderboard button
     menuExitButton->draw();
     
     SDL_RenderPresent(renderer);
@@ -1648,6 +2062,8 @@ void Game::startGame() {
     menuTitle = nullptr;
     menuNewGameButton = nullptr;
     menuLoadGameButton = nullptr;
+    menuSettingsButton = nullptr;
+    menuLeaderboardButton = nullptr;
     menuExitButton = nullptr;
     
     // Reset all entity pointers
@@ -1706,6 +2122,7 @@ void Game::initEndScreen(bool victory) {
     endTitle = &manager.addEntity();
     endMessage = &manager.addEntity();
     endRestartButton = &manager.addEntity();
+    endReplayButton = &manager.addEntity();  // Add replay button
     endMenuButton = &manager.addEntity();
     
     // Set up UI components with appropriate text
@@ -1717,23 +2134,27 @@ void Game::initEndScreen(bool victory) {
     endMessage->addComponent<UILabel>(0, 300, message, "font1", white);
     
     endRestartButton->addComponent<UILabel>(0, 450, "RESTART GAME", "font1", white);
-    endMenuButton->addComponent<UILabel>(0, 530, "MAIN MENU", "font1", white);
+    endReplayButton->addComponent<UILabel>(0, 500, "REPLAY LEVEL", "font1", white);  // Add replay button label
+    endMenuButton->addComponent<UILabel>(0, 550, "MAIN MENU", "font1", white);  // Adjust position
     
     // Center all elements horizontally
     int titleWidth = endTitle->getComponent<UILabel>().GetWidth();
     int messageWidth = endMessage->getComponent<UILabel>().GetWidth();
     int restartWidth = endRestartButton->getComponent<UILabel>().GetWidth();
+    int replayWidth = endReplayButton->getComponent<UILabel>().GetWidth();  // Get replay button width
     int menuWidth = endMenuButton->getComponent<UILabel>().GetWidth();
     
     int titleX = (1920 - titleWidth) / 2;
     int messageX = (1920 - messageWidth) / 2;
     int restartX = (1920 - restartWidth) / 2;
+    int replayX = (1920 - replayWidth) / 2;  // Calculate replay button position
     int menuX = (1920 - menuWidth) / 2;
     
     endTitle->getComponent<UILabel>().SetPosition(titleX, 150);
     endMessage->getComponent<UILabel>().SetPosition(messageX, 300);
     endRestartButton->getComponent<UILabel>().SetPosition(restartX, 450);
-    endMenuButton->getComponent<UILabel>().SetPosition(menuX, 530);
+    endReplayButton->getComponent<UILabel>().SetPosition(replayX, 500);  // Position replay button
+    endMenuButton->getComponent<UILabel>().SetPosition(menuX, 550);  // Adjust position
     
     // Make buttons clickable
     endRestartButton->getComponent<UILabel>().SetClickable(true);
@@ -1777,6 +2198,15 @@ void Game::initEndScreen(bool victory) {
     endRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
     endRestartButton->getComponent<UILabel>().ResetHoverState();
     
+    // Make replay button clickable
+    endReplayButton->getComponent<UILabel>().SetClickable(true);
+    endReplayButton->getComponent<UILabel>().SetOnClick([this]() { 
+        // Call replay function
+        replay();
+    });
+    endReplayButton->getComponent<UILabel>().SetHoverColor(yellow);
+    endReplayButton->getComponent<UILabel>().ResetHoverState();
+    
     endMenuButton->getComponent<UILabel>().SetClickable(true);
     endMenuButton->getComponent<UILabel>().SetOnClick([this]() { 
         // Set a flag to return to main menu after this frame
@@ -1795,6 +2225,10 @@ void Game::updateEndScreen() {
         endRestartButton->getComponent<UILabel>().ResetHoverState();
     }
     
+    if (endReplayButton && endReplayButton->hasComponent<UILabel>()) {
+        endReplayButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
     if (endMenuButton && endMenuButton->hasComponent<UILabel>()) {
         endMenuButton->getComponent<UILabel>().ResetHoverState();
     }
@@ -1805,6 +2239,11 @@ void Game::updateEndScreen() {
             case END_RESTART:
                 if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
                     endRestartButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case END_REPLAY:
+                if (endReplayButton && endReplayButton->hasComponent<UILabel>()) {
+                    endReplayButton->getComponent<UILabel>().SetTextColor(yellow);
                 }
                 break;
             case END_MAIN_MENU:
@@ -1826,7 +2265,521 @@ void Game::renderEndScreen() {
     endTitle->draw();
     endMessage->draw();
     endRestartButton->draw();
+    endReplayButton->draw();
     endMenuButton->draw();
     
     SDL_RenderPresent(renderer);
+}
+
+void Game::togglePause() {
+    if (gameState == STATE_GAME) {
+        // Pause the game
+        gameState = STATE_PAUSE;
+        
+        // Initialize the pause menu
+        initPauseMenu();
+    } else if (gameState == STATE_PAUSE) {
+        // Resume the game
+        gameState = STATE_GAME;
+        
+        // Clean up pause menu entities
+        if (pauseTitle) pauseTitle->destroy();
+        if (pauseResumeButton) pauseResumeButton->destroy();
+        if (pauseSaveButton) pauseSaveButton->destroy();
+        if (pauseRestartButton) pauseRestartButton->destroy();
+        if (pauseSettingsButton) pauseSettingsButton->destroy();
+        if (pauseMainMenuButton) pauseMainMenuButton->destroy();
+        
+        // Reset pointers
+        pauseTitle = nullptr;
+        pauseResumeButton = nullptr;
+        pauseSaveButton = nullptr;
+        pauseRestartButton = nullptr;
+        pauseSettingsButton = nullptr;
+        pauseMainMenuButton = nullptr;
+        
+        // Reset state
+        selectedPauseItem = PAUSE_RESUME;
+        pauseHighlightActive = false;
+        pauseItemSelected = false;
+    }
+}
+
+void Game::initPauseMenu() {
+    // Reset selection and hover states
+    selectedPauseItem = PAUSE_RESUME; // Default selection
+    pauseItemSelected = false;
+    pauseHighlightActive = true; // Start with highlights active
+    
+    // Create pause menu entity objects
+    pauseTitle = &manager.addEntity();
+    pauseResumeButton = &manager.addEntity();
+    pauseSaveButton = &manager.addEntity();
+    pauseRestartButton = &manager.addEntity();
+    pauseSettingsButton = &manager.addEntity();
+    pauseMainMenuButton = &manager.addEntity();
+    
+    // Set up UI components with appropriate text
+    pauseTitle->addComponent<UILabel>(0, 150, "PAUSED", "font2", white);
+    pauseResumeButton->addComponent<UILabel>(0, 300, "RESUME", "font1", white);
+    pauseSaveButton->addComponent<UILabel>(0, 360, "SAVE GAME", "font1", white);
+    pauseRestartButton->addComponent<UILabel>(0, 420, "RESTART", "font1", white);
+    pauseSettingsButton->addComponent<UILabel>(0, 480, "SETTINGS", "font1", white);
+    pauseMainMenuButton->addComponent<UILabel>(0, 540, "MAIN MENU", "font1", white);
+    
+    // Center all elements horizontally
+    int titleWidth = pauseTitle->getComponent<UILabel>().GetWidth();
+    int resumeWidth = pauseResumeButton->getComponent<UILabel>().GetWidth();
+    int saveWidth = pauseSaveButton->getComponent<UILabel>().GetWidth();
+    int restartWidth = pauseRestartButton->getComponent<UILabel>().GetWidth();
+    int settingsWidth = pauseSettingsButton->getComponent<UILabel>().GetWidth();
+    int menuWidth = pauseMainMenuButton->getComponent<UILabel>().GetWidth();
+    
+    int titleX = (1920 - titleWidth) / 2;
+    int resumeX = (1920 - resumeWidth) / 2;
+    int saveX = (1920 - saveWidth) / 2;
+    int restartX = (1920 - restartWidth) / 2;
+    int settingsX = (1920 - settingsWidth) / 2;
+    int menuX = (1920 - menuWidth) / 2;
+    
+    pauseTitle->getComponent<UILabel>().SetPosition(titleX, 150);
+    pauseResumeButton->getComponent<UILabel>().SetPosition(resumeX, 300);
+    pauseSaveButton->getComponent<UILabel>().SetPosition(saveX, 360);
+    pauseRestartButton->getComponent<UILabel>().SetPosition(restartX, 420);
+    pauseSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 480);
+    pauseMainMenuButton->getComponent<UILabel>().SetPosition(menuX, 540);
+    
+    // Make buttons clickable
+    pauseResumeButton->getComponent<UILabel>().SetClickable(true);
+    pauseResumeButton->getComponent<UILabel>().SetOnClick([this]() { togglePause(); });
+    pauseResumeButton->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    pauseSaveButton->getComponent<UILabel>().SetClickable(true);
+    pauseSaveButton->getComponent<UILabel>().SetOnClick([this]() { saveGame(); });
+    pauseSaveButton->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    pauseRestartButton->getComponent<UILabel>().SetClickable(true);
+    pauseRestartButton->getComponent<UILabel>().SetOnClick([this]() { 
+        needsRestart = true;
+        gameState = STATE_GAME;
+    });
+    pauseRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    pauseSettingsButton->getComponent<UILabel>().SetClickable(true);
+    pauseSettingsButton->getComponent<UILabel>().SetOnClick([this]() { 
+        previousState = STATE_PAUSE; // Store that we came from pause menu
+        gameState = STATE_SETTINGS;
+        initSettingsMenu();
+    });
+    pauseSettingsButton->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    pauseMainMenuButton->getComponent<UILabel>().SetClickable(true);
+    pauseMainMenuButton->getComponent<UILabel>().SetOnClick([this]() { returnToMainMenu = true; });
+    pauseMainMenuButton->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    // Update the pause menu to apply initial highlighting
+    updatePauseMenu();
+}
+
+void Game::updatePauseMenu() {
+    // Reset all buttons to default state
+    if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
+        pauseResumeButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (pauseSaveButton && pauseSaveButton->hasComponent<UILabel>()) {
+        pauseSaveButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (pauseRestartButton && pauseRestartButton->hasComponent<UILabel>()) {
+        pauseRestartButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (pauseSettingsButton && pauseSettingsButton->hasComponent<UILabel>()) {
+        pauseSettingsButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (pauseMainMenuButton && pauseMainMenuButton->hasComponent<UILabel>()) {
+        pauseMainMenuButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    // Only highlight the selected item if highlight is active
+    if (pauseHighlightActive) {
+        switch (selectedPauseItem) {
+            case PAUSE_RESUME:
+                if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
+                    pauseResumeButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case PAUSE_SAVE:
+                if (pauseSaveButton && pauseSaveButton->hasComponent<UILabel>()) {
+                    pauseSaveButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case PAUSE_RESTART:
+                if (pauseRestartButton && pauseRestartButton->hasComponent<UILabel>()) {
+                    pauseRestartButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case PAUSE_SETTINGS:
+                if (pauseSettingsButton && pauseSettingsButton->hasComponent<UILabel>()) {
+                    pauseSettingsButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case PAUSE_MAIN_MENU:
+                if (pauseMainMenuButton && pauseMainMenuButton->hasComponent<UILabel>()) {
+                    pauseMainMenuButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void Game::renderPauseMenu() {
+    // First render the game in the background
+    for(auto& t : *tiles) t->draw();
+    for(auto& p : *players) p->draw();
+    for(auto& e : *enemies) e->draw();
+    for(auto& o : *objects) o->draw();
+    for(auto& p : *projectiles) p->draw();
+    
+    // Ensure scientist is drawn if it exists
+    if (scientist != nullptr && scientist->isActive()) {
+        scientist->draw();
+    }
+    
+    // Draw normal UI elements in the background
+    healthbar->draw();
+    ammobar->draw();
+    clueCounter->draw();
+    timerLabel->draw();
+    
+    // Add a semi-transparent black overlay for the entire screen
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // Black with 70% opacity
+    SDL_Rect fullscreen = {0, 0, 1920, 1080};
+    SDL_RenderFillRect(renderer, &fullscreen);
+    
+    // Now draw the pause menu elements on top
+    if (pauseTitle) pauseTitle->draw();
+    if (pauseResumeButton) pauseResumeButton->draw();
+    if (pauseSaveButton) pauseSaveButton->draw();
+    if (pauseRestartButton) pauseRestartButton->draw();
+    if (pauseSettingsButton) pauseSettingsButton->draw();
+    if (pauseMainMenuButton) pauseMainMenuButton->draw();
+    
+    SDL_RenderPresent(renderer);
+}
+
+void Game::saveGame() {
+    // This is a stub function for now
+    // In a real implementation, this would save the game state to a file
+    
+    std::cout << "Save game feature not implemented yet." << std::endl;
+    
+    // Show a temporary notification that game was saved
+    // Create a notification at the bottom of the screen
+    Entity* notification = &manager.addEntity();
+    notification->addComponent<UILabel>(0, 600, "Game saved!", "font1", green);
+    
+    // Center the notification
+    int notifyWidth = notification->getComponent<UILabel>().GetWidth();
+    int notifyX = (1920 - notifyWidth) / 2;
+    notification->getComponent<UILabel>().SetPosition(notifyX, 600);
+    
+    // Set a timer to destroy the notification after 2 seconds
+    // In a real implementation, we'd use a proper timer system
+    // For this demo, we'll just leave it there
+}
+
+void Game::initSettingsMenu() {
+    // Reset selection and hover states
+    selectedSettingsItem = SETTINGS_VOLUME;
+    settingsItemSelected = false;
+    settingsHighlightActive = true;
+    draggingVolumeSlider = false;
+    
+    // Create settings menu entity objects
+    settingsTitle = &manager.addEntity();
+    volumeSlider = &manager.addEntity();
+    volumeLabel = &manager.addEntity();
+    keybindsLabel = &manager.addEntity();
+    settingsBackButton = &manager.addEntity();
+    
+    // Set up UI components with appropriate text
+    settingsTitle->addComponent<UILabel>(0, 150, "SETTINGS", "font2", white);
+    
+    // Create volume slider and label
+    std::stringstream volSS;
+    volSS << "Volume: " << volumeLevel << "%";
+    volumeLabel->addComponent<UILabel>(0, 300, volSS.str(), "font1", white);
+    
+    // Create a fixed-width slider with equal-sized segments
+    std::string sliderText = "[";
+    int sliderLength = 40;
+    int filledAmount = (volumeLevel * sliderLength) / 100;
+    
+    for (int i = 0; i < sliderLength; i++) {
+        if (i < filledAmount) {
+            sliderText += "=";
+        } else {
+            sliderText += " ";
+        }
+    }
+    sliderText += "]";
+    
+    // Use a monospace font if available, or a fixed-width representation
+    volumeSlider->addComponent<UILabel>(0, 340, sliderText, "font1", white);
+    
+    // Keybinds section - just the title
+    keybindsLabel->addComponent<UILabel>(0, 400, "CONTROLS", "font1", white);
+    
+    // Back button - changing Y position from 720 to an even lower position
+    settingsBackButton->addComponent<UILabel>(0, 800, "BACK", "font1", white);
+    
+    // Center all elements horizontally
+    int titleWidth = settingsTitle->getComponent<UILabel>().GetWidth();
+    int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
+    int sliderWidth = volumeSlider->getComponent<UILabel>().GetWidth();
+    int keybindsWidth = keybindsLabel->getComponent<UILabel>().GetWidth();
+    int backWidth = settingsBackButton->getComponent<UILabel>().GetWidth();
+    
+    int titleX = (1920 - titleWidth) / 2;
+    int volLabelX = (1920 - volLabelWidth) / 2;
+    int sliderX = (1920 - sliderWidth) / 2;
+    int keybindsX = (1920 - keybindsWidth) / 2;
+    int backX = (1920 - backWidth) / 2;
+    
+    settingsTitle->getComponent<UILabel>().SetPosition(titleX, 150);
+    volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
+    volumeSlider->getComponent<UILabel>().SetPosition(sliderX, 340);
+    keybindsLabel->getComponent<UILabel>().SetPosition(keybindsX, 400);
+    settingsBackButton->getComponent<UILabel>().SetPosition(backX, 800);
+    
+    // Make back button clickable - return to correct previous state
+    settingsBackButton->getComponent<UILabel>().SetClickable(true);
+    settingsBackButton->getComponent<UILabel>().SetOnClick([this]() { 
+        gameState = previousState; // Return to previous state (main menu or pause)
+        applySettings();
+    });
+    settingsBackButton->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    // Make slider clickable
+    volumeSlider->getComponent<UILabel>().SetClickable(true);
+    volumeSlider->getComponent<UILabel>().SetHoverColor(yellow);
+    
+    // Update the settings menu to apply initial highlighting
+    updateSettingsMenu();
+}
+
+void Game::updateSettingsMenu() {
+    // Update volume label based on current volume level
+    if (volumeLabel && volumeLabel->hasComponent<UILabel>()) {
+        std::stringstream volSS;
+        volSS << "Volume: " << volumeLevel << "%";
+        volumeLabel->getComponent<UILabel>().SetLabelText(volSS.str(), "font1");
+        
+        // Center the updated label
+        int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
+        int volLabelX = (1920 - volLabelWidth) / 2;
+        volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
+    }
+    
+    // Update slider visual - recreate the entire slider to maintain fixed width
+    if (volumeSlider && volumeSlider->hasComponent<UILabel>()) {
+        std::string sliderText = "[";
+        int sliderLength = 40;
+        int filledAmount = (volumeLevel * sliderLength) / 100;
+        
+        for (int i = 0; i < sliderLength; i++) {
+            if (i < filledAmount) {
+                sliderText += "=";
+            } else {
+                sliderText += " ";
+            }
+        }
+        sliderText += "]";
+        
+        // Update slider text but maintain position
+        volumeSlider->getComponent<UILabel>().SetLabelText(sliderText, "font1");
+        
+        // Re-center the slider 
+        int sliderWidth = volumeSlider->getComponent<UILabel>().GetWidth();
+        int sliderX = (1920 - sliderWidth) / 2;
+        volumeSlider->getComponent<UILabel>().SetPosition(sliderX, 340);
+    }
+    
+    // Reset all items to default state
+    if (volumeSlider && volumeSlider->hasComponent<UILabel>()) {
+        volumeSlider->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    if (settingsBackButton && settingsBackButton->hasComponent<UILabel>()) {
+        settingsBackButton->getComponent<UILabel>().ResetHoverState();
+    }
+    
+    // Only highlight the selected item if highlight is active
+    if (settingsHighlightActive) {
+        switch (selectedSettingsItem) {
+            case SETTINGS_VOLUME:
+                if (volumeSlider && volumeSlider->hasComponent<UILabel>()) {
+                    volumeSlider->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            case SETTINGS_BACK:
+                if (settingsBackButton && settingsBackButton->hasComponent<UILabel>()) {
+                    settingsBackButton->getComponent<UILabel>().SetTextColor(yellow);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void Game::renderSettingsMenu() {
+    // Determine the background based on where we came from
+    if (previousState == STATE_PAUSE) {
+        // When coming from pause menu, draw the game in the background
+        for(auto& t : *tiles) t->draw();
+        for(auto& p : *players) p->draw();
+        for(auto& e : *enemies) e->draw();
+        for(auto& o : *objects) o->draw();
+        for(auto& p : *projectiles) p->draw();
+        
+        // Ensure scientist is drawn if it exists
+        if (scientist != nullptr && scientist->isActive()) {
+            scientist->draw();
+        }
+        
+        // Draw normal UI elements in the background
+        healthbar->draw();
+        ammobar->draw();
+        clueCounter->draw();
+        timerLabel->draw();
+    } else {
+        // When coming from main menu, just draw a black background
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black background
+        SDL_RenderClear(renderer);
+    }
+    
+    // Add a semi-transparent black overlay for the entire screen
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // Black with 70% opacity
+    SDL_Rect fullscreen = {0, 0, 1920, 1080};
+    SDL_RenderFillRect(renderer, &fullscreen);
+    
+    // Now draw the settings menu elements on top
+    if (settingsTitle) settingsTitle->draw();
+    if (volumeLabel) volumeLabel->draw();
+    
+    // Draw a graphical volume slider instead of text-based one
+    int screenCenter = 1920 / 2;
+    int sliderY = 340;
+    int sliderWidth = 400;
+    int sliderHeight = 20;
+    int sliderX = screenCenter - (sliderWidth / 2);
+    
+    // Draw slider background
+    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255); // Dark gray
+    SDL_Rect sliderBg = {sliderX, sliderY, sliderWidth, sliderHeight};
+    SDL_RenderFillRect(renderer, &sliderBg);
+    
+    // Draw filled portion based on volume
+    int filledWidth = (volumeLevel * sliderWidth) / 100;
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // Light gray
+    SDL_Rect filledRect = {sliderX, sliderY, filledWidth, sliderHeight};
+    SDL_RenderFillRect(renderer, &filledRect);
+    
+    // Draw border
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White
+    SDL_RenderDrawRect(renderer, &sliderBg);
+    
+    // Draw slider knob/handle
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White
+    int knobX = sliderX + filledWidth - 4;
+    SDL_Rect knob = {knobX, sliderY - 5, 8, sliderHeight + 10};
+    SDL_RenderFillRect(renderer, &knob);
+    
+    // Highlight slider if selected
+    if (settingsHighlightActive && selectedSettingsItem == SETTINGS_VOLUME) {
+        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Yellow
+        SDL_Rect highlightRect = {sliderX - 2, sliderY - 2, sliderWidth + 4, sliderHeight + 4};
+        SDL_RenderDrawRect(renderer, &highlightRect);
+    }
+    
+    // Draw keybinds manually with increased spacing
+    if (keybindsLabel) {
+        keybindsLabel->draw();
+        
+        // Manually draw each keybind entry
+        TTF_Font* font = assets->GetFont("font1");
+        if (font) {
+            int yOffset = 450; // Increased starting position
+            int screenCenter = 1920 / 2;
+            
+            for (const auto& keybind : keybinds) {
+                std::string bindText = keybind.action + ": " + keybind.key;
+                
+                // Render text
+                SDL_Surface* textSurface = TTF_RenderText_Solid(font, bindText.c_str(), white);
+                if (textSurface) {
+                    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+                    if (textTexture) {
+                        // Center the text
+                        int textWidth = textSurface->w;
+                        int textHeight = textSurface->h;
+                        int xPos = screenCenter - (textWidth / 2);
+                        
+                        SDL_Rect destRect = {xPos, yOffset, textWidth, textHeight};
+                        SDL_RenderCopy(renderer, textTexture, NULL, &destRect);
+                        
+                        SDL_DestroyTexture(textTexture);
+                    }
+                    SDL_FreeSurface(textSurface);
+                }
+                
+                yOffset += 45; // Even more spacing between controls (was 40)
+            }
+        }
+    }
+    
+    // Draw the back button
+    if (settingsBackButton) settingsBackButton->draw();
+    
+    SDL_RenderPresent(renderer);
+}
+
+void Game::applySettings() {
+    // Here you would typically apply the settings to the game
+    // For this demo, we'll just clean up the settings menu entities
+    
+    // Clean up settings menu entities
+    if (settingsTitle) settingsTitle->destroy();
+    if (volumeSlider) volumeSlider->destroy();
+    if (volumeLabel) volumeLabel->destroy();
+    if (keybindsLabel) keybindsLabel->destroy();
+    if (settingsBackButton) settingsBackButton->destroy();
+    
+    // Reset pointers
+    settingsTitle = nullptr;
+    volumeSlider = nullptr;
+    volumeLabel = nullptr;
+    keybindsLabel = nullptr;
+    settingsBackButton = nullptr;
+    
+    // Reset state
+    selectedSettingsItem = SETTINGS_VOLUME;
+    settingsHighlightActive = false;
+    settingsItemSelected = false;
+    draggingVolumeSlider = false;
+}
+
+// Add this at the end of the file
+
+void Game::replay() {
+    // This function currently does nothing
+    // Will be implemented later to replay the current level
 }
