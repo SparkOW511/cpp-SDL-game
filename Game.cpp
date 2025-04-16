@@ -687,6 +687,52 @@ void Game::update()
     if (returnToMainMenu) {
         returnToMainMenu = false; // Reset flag
         
+        // Reset all game state variables just like when restarting
+        gameOver = false;
+        playerWon = false;
+        collectedClues = 0;
+        damageTimer = 1.0f;
+        objectCollisionDelay = 1.0f;
+        objectCollisionsEnabled = false;
+        questionActive = false;
+        pendingClueEntity = nullptr;
+        showFeedback = false;
+        showingExitInstructions = false;
+        level4MapChanged = false;
+        finalBossDefeated = false;
+        scientistRescued = false;
+        canRescueScientist = false;
+        currentLevel = 1;
+        
+        // Reset used questions
+        resetUsedQuestions();
+        
+        // Set clue count for level 1
+        totalClues = 3;
+        
+        // Reset position tracking
+        positionManager.resetPositions();
+        
+        // Reset gameplay timer
+        gameStartTime = 0;
+        gameplayTime = 0;
+        
+        // Reset all entity pointers
+        player = nullptr;
+        finalBoss = nullptr;
+        healthbar = nullptr;
+        ammobar = nullptr;
+        gameover = nullptr;
+        clueCounter = nullptr;
+        feedbackLabel = nullptr;
+        scientist = nullptr;
+        questionLabel = nullptr;
+        answer1Label = nullptr;
+        answer2Label = nullptr;
+        answer3Label = nullptr;
+        answer4Label = nullptr;
+        questionBackground = nullptr;
+        
         // Clean up game entities
         if (map != nullptr) {
             delete map;
@@ -1572,6 +1618,25 @@ void Game::renderMainMenu() {
 }
 
 void Game::startGame() {
+    // Reset all game state variables for a fresh start
+    gameOver = false;
+    playerWon = false;
+    collectedClues = 0;
+    damageTimer = 1.0f;
+    objectCollisionDelay = 1.0f;
+    objectCollisionsEnabled = false;
+    questionActive = false;
+    pendingClueEntity = nullptr;
+    showFeedback = false;
+    showingExitInstructions = false;
+    level4MapChanged = false;
+    finalBossDefeated = false;
+    scientistRescued = false;
+    canRescueScientist = false;
+    
+    // Reset used questions when starting a new game
+    resetUsedQuestions();
+    
     // Change game state
     gameState = STATE_GAME;
     
@@ -1584,6 +1649,22 @@ void Game::startGame() {
     menuNewGameButton = nullptr;
     menuLoadGameButton = nullptr;
     menuExitButton = nullptr;
+    
+    // Reset all entity pointers
+    player = nullptr;
+    finalBoss = nullptr;
+    healthbar = nullptr;
+    ammobar = nullptr;
+    gameover = nullptr;
+    clueCounter = nullptr;
+    feedbackLabel = nullptr;
+    scientist = nullptr;
+    questionLabel = nullptr;
+    answer1Label = nullptr;
+    answer2Label = nullptr;
+    answer3Label = nullptr;
+    answer4Label = nullptr;
+    questionBackground = nullptr;
     
     // Clear all existing entities
     manager.clear();
@@ -1599,9 +1680,12 @@ void Game::startGame() {
     // Start with level 1
     currentLevel = 1;
     
+    // Reset position tracking
+    positionManager.resetPositions();
+    
     // Load the level and initialize game entities
-            loadLevel(currentLevel);
-            initEntities();
+    loadLevel(currentLevel);
+    initEntities();
 }
 
 void Game::loadGame() {
