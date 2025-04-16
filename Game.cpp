@@ -1894,11 +1894,13 @@ void Game::initMainMenu() {
     
     // Set up UI components
     menuTitle->addComponent<UILabel>(0, 200, "Dejte mi RPA 3 prosm", "font2", white);
+    
+    // Increased spacing between menu buttons
     menuNewGameButton->addComponent<UILabel>(0, 400, "NEW GAME", "font1", white);
-    menuLoadGameButton->addComponent<UILabel>(0, 450, "LOAD GAME", "font1", white);
-    menuSettingsButton->addComponent<UILabel>(0, 500, "SETTINGS", "font1", white);  // Add settings text
-    menuLeaderboardButton->addComponent<UILabel>(0, 550, "LEADERBOARD", "font1", white);  // Add leaderboard text
-    menuExitButton->addComponent<UILabel>(0, 600, "EXIT", "font1", white);  // Adjust position
+    menuLoadGameButton->addComponent<UILabel>(0, 470, "LOAD GAME", "font1", white);  // From 450 to 470
+    menuSettingsButton->addComponent<UILabel>(0, 540, "SETTINGS", "font1", white);   // From 500 to 540
+    menuLeaderboardButton->addComponent<UILabel>(0, 610, "LEADERBOARD", "font1", white); // From 550 to 610
+    menuExitButton->addComponent<UILabel>(0, 680, "EXIT", "font1", white);  // From 600 to 680
     
     // Center the menu items horizontally
     int titleWidth = menuTitle->getComponent<UILabel>().GetWidth();
@@ -1917,10 +1919,10 @@ void Game::initMainMenu() {
     
     menuTitle->getComponent<UILabel>().SetPosition(titleX, 200);
     menuNewGameButton->getComponent<UILabel>().SetPosition(newGameX, 400);
-    menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 450);
-    menuSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 500);  // Position settings button
-    menuLeaderboardButton->getComponent<UILabel>().SetPosition(leaderboardX, 550);  // Position leaderboard button
-    menuExitButton->getComponent<UILabel>().SetPosition(exitX, 600);  // Adjust position
+    menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 470);  // From 450 to 470
+    menuSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 540);  // From 500 to 540
+    menuLeaderboardButton->getComponent<UILabel>().SetPosition(leaderboardX, 610);  // From 550 to 610
+    menuExitButton->getComponent<UILabel>().SetPosition(exitX, 680);  // From 600 to 680
     
     // Make menu items clickable but ensure they're not hovered initially
     menuNewGameButton->getComponent<UILabel>().SetClickable(true);
