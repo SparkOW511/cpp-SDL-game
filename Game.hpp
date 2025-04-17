@@ -266,7 +266,7 @@ class Game {
             {"Move Left", "A"},
             {"Move Right", "D"},
             {"Shoot", "Left Mouse"},
-            {"Interact", "E"},
+            {"Interact/Skip Question", "E"},
             {"Pause", "ESC"}
         };
 

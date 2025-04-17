@@ -459,7 +459,7 @@ void Game::handleEvents()
                     case SDLK_KP_4:
                         checkAnswer(3);
                         break;
-                    case SDLK_ESCAPE:
+                    case SDLK_e:
                         closeQuestion();
                         break;
                     default:

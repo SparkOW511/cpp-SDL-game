@@ -28,6 +28,10 @@ class KeyboardController : public Component {
         bool facingUp;    // Track if player is facing up
         bool facingDown;  // Track if player is facing down
         bool enabled = true; // Flag to enable/disable keyboard controls
+        
+        // Cooldown tracking after entering game state
+        Uint32 gameStartTime = 0;
+        const Uint32 gameStartCooldown = 500; // 500ms cooldown after entering game
 
         void init() override {
             transform = &entity->getComponent<TransformComponent>();
@@ -41,6 +45,7 @@ class KeyboardController : public Component {
             }
             
             lastShotTime = 0;
+            gameStartTime = SDL_GetTicks(); // Set initial cooldown time on initialization
             isMoving = false;
             isShooting = false;
             wasShooting = false;
@@ -80,20 +85,12 @@ class KeyboardController : public Component {
                 isMoving = true;
                 facingUp = true;
                 facingDown = false;
-                
-                // Update last direction for shooting
-                playerDirection = "ShootUp";
-                lastPlayerDirection = "ShootUp";
             }
             else if (keyState[SDL_SCANCODE_S]) {
                 transform->velocity.y = 1;
                 isMoving = true;
                 facingDown = true;
                 facingUp = false;
-                
-                // Update last direction for shooting
-                playerDirection = "ShootDown";
-                lastPlayerDirection = "ShootDown";
             }
             else {
                 // Keep the facing direction but stop moving vertically
@@ -111,10 +108,6 @@ class KeyboardController : public Component {
                 playerFlip = SDL_FLIP_HORIZONTAL;
                 isMoving = true;
                 
-                // Update last direction for shooting
-                playerDirection = "Shoot";
-                lastPlayerDirection = "Shoot";
-                
                 // If moving horizontally, reset vertical facing flags
                 if (!keyState[SDL_SCANCODE_W] && !keyState[SDL_SCANCODE_S]) {
                     facingUp = false;
@@ -126,10 +119,6 @@ class KeyboardController : public Component {
                 playerFlip = SDL_FLIP_NONE;
                 isMoving = true;
                 
-                // Update last direction for shooting
-                playerDirection = "Shoot";
-                lastPlayerDirection = "Shoot";
-                
                 // If moving horizontally, reset vertical facing flags
                 if (!keyState[SDL_SCANCODE_W] && !keyState[SDL_SCANCODE_S]) {
                     facingUp = false;
@@ -137,90 +126,108 @@ class KeyboardController : public Component {
                 }
             }
             
-            // Update shooting parameters based on last movement direction
-            if (facingUp || transform->velocity.y < 0 || lastPlayerDirection == "ShootUp") { // Facing or moving up
-                velX = 0;
-                velY = -3;
-                offsetY = 30;
-                
-                // Adjust offset based on the player's horizontal orientation
-                if (playerFlip == SDL_FLIP_HORIZONTAL) {
-                    offsetX = 40; // Offset for left-facing player shooting up
-                } else {
-                    offsetX = 60; // Offset for right-facing player shooting up
-                }
-                
+            // Get mouse position and calculate direction relative to player
+            int mouseX, mouseY;
+            SDL_GetMouseState(&mouseX, &mouseY);
+            
+            // Convert mouse screen coordinates to world coordinates
+            mouseX += Game::camera.x;
+            mouseY += Game::camera.y;
+            
+            // Calculate differences between mouse and player center position
+            int playerCenterX = transform->position.x + transform->width * transform->scale / 2;
+            int playerCenterY = transform->position.y + transform->height * transform->scale / 2;
+            int deltaX = mouseX - playerCenterX;
+            int deltaY = mouseY - playerCenterY;
+            
+            // Determine shooting direction based on mouse position angle
+            // Use atan2 to get the angle between player and mouse
+            float angle = atan2(deltaY, deltaX) * 180.0f / M_PI;
+            
+            // Convert angle to 0-360 degrees for easier logic
+            if (angle < 0) angle += 360.0f;
+            
+            // Determine shooting direction based on angle
+            // Right: -45 to 45 degrees
+            // Down: 45 to 135 degrees
+            // Left: 135 to 225 degrees
+            // Up: 225 to 315 degrees
+            
+            if ((angle >= 315.0f || angle < 45.0f)) {
+                // Right
+                velX = 3;
+                velY = 0;
+                offsetY = 25;
+                offsetX = 65;
                 bulletFlip = SDL_FLIP_NONE;
-                direction = "bulletVertical";
-                playerDirection = "ShootUp";
-                // Don't change playerFlip here - maintain horizontal orientation
+                playerFlip = SDL_FLIP_NONE; // Always face right when shooting right
+                direction = "bulletHorizontal";
+                playerDirection = "Shoot";
+                lastPlayerDirection = "Shoot";
             }
-            else if (facingDown || transform->velocity.y > 0 || lastPlayerDirection == "ShootDown") { // Facing or moving down
+            else if (angle >= 45.0f && angle < 135.0f) {
+                // Down
                 velX = 0;
                 velY = 3;
                 offsetY = 30;
-                
-                // Adjust offset based on the player's horizontal orientation
-                if (playerFlip == SDL_FLIP_HORIZONTAL) {
-                    offsetX = 40; // Offset for left-facing player shooting down
-                } else {
-                    offsetX = 60; // Offset for right-facing player shooting down
-                }
-                
+                offsetX = 50; // Center offset
                 bulletFlip = SDL_FLIP_HORIZONTAL;
                 direction = "bulletVertical";
                 playerDirection = "ShootDown";
-                // Don't change playerFlip here - maintain horizontal orientation
+                lastPlayerDirection = "ShootDown";
+                // For vertical shooting, never flip the sprite
+                sprite->SetFlip(SDL_FLIP_NONE);
             }
-            else if (transform->velocity.x != 0 || lastPlayerDirection == "Shoot") { // Moving horizontally
+            else if (angle >= 135.0f && angle < 225.0f) {
+                // Left
+                velX = -3;
                 velY = 0;
                 offsetY = 25;
+                offsetX = -35;
+                bulletFlip = SDL_FLIP_HORIZONTAL;
+                playerFlip = SDL_FLIP_HORIZONTAL; // Always face left when shooting left
                 direction = "bulletHorizontal";
-                playerDirection = "Shoot";
-                
-                if (transform->velocity.x < 0 || playerFlip == SDL_FLIP_HORIZONTAL) { // Moving left or facing left
-                    velX = -3;
-                    offsetX = -35;
-                    bulletFlip = SDL_FLIP_HORIZONTAL;
-                    playerFlip = SDL_FLIP_HORIZONTAL;
-                }
-                else { // Moving right or facing right
-                    velX = 3;
-                    offsetX = 65;
-                    bulletFlip = SDL_FLIP_NONE;
-                    playerFlip = SDL_FLIP_NONE;
-                }
-            }
-            else {
-                // Default if no other condition matches
-                // Use last stored facing based on flip
-                if (playerFlip == SDL_FLIP_HORIZONTAL) {
-                    velX = -3;
-                    velY = 0;
-                    offsetY = 25;
-                    offsetX = -35;
-                    bulletFlip = SDL_FLIP_HORIZONTAL;
-                }
-                else {
-                    velX = 3;
-                    velY = 0;
-                    offsetY = 25;
-                    offsetX = 65;
-                    bulletFlip = SDL_FLIP_NONE;
-                }
                 playerDirection = "Shoot";
                 lastPlayerDirection = "Shoot";
-                direction = "bulletHorizontal";
+            }
+            else {
+                // Up
+                velX = 0;
+                velY = -3;
+                offsetY = 30;
+                offsetX = 50; // Center offset
+                bulletFlip = SDL_FLIP_NONE;
+                direction = "bulletVertical";
+                playerDirection = "ShootUp";
+                lastPlayerDirection = "ShootUp";
+                // For vertical shooting, never flip the sprite
+                sprite->SetFlip(SDL_FLIP_NONE);
             }
 
-            // Handle shooting
-            if (keyState[SDL_SCANCODE_SPACE]) {
+            // Handle shooting with left mouse button
+            // Check if in Game state before allowing shooting
+            Uint32 mouseButtons = SDL_GetMouseState(NULL, NULL);
+            Uint32 currentTime = SDL_GetTicks();
+            bool startCooldownPassed = (currentTime - gameStartTime >= gameStartCooldown);
+            
+            // Reset cooldown timer when game state changes to or from STATE_GAME
+            if (Game::gameState == STATE_GAME && isMoving) {
+                // Consider the cooldown passed when player starts moving
+                startCooldownPassed = true;
+            }
+            
+            if (mouseButtons & SDL_BUTTON(SDL_BUTTON_LEFT) && 
+                Game::gameState == STATE_GAME && 
+                !Game::questionActive && 
+                !Game::gameOver && 
+                startCooldownPassed) {
+                
                 bool canShoot = true;
-                if(ammo != nullptr) {
+                if (ammo != nullptr) {
                     canShoot = ammo->canShoot();
                 }
                 
-                if (SDL_GetTicks() - lastShotTime >= shotCooldown && canShoot) {
+                if (currentTime - lastShotTime >= shotCooldown && canShoot) {
                     // Set shooting state
                     isShooting = true;
                     
@@ -240,39 +247,46 @@ class KeyboardController : public Component {
                     }
                     
                     // Reset shot cooldown timer
-                    lastShotTime = SDL_GetTicks();
+                    lastShotTime = currentTime;
                 }
             }
             
-            // Animation handling - prioritize shooting over movement
+            // Animation handling - update player appearance based on current state
             if (isShooting) {
                 // Play shooting animation in the appropriate direction
                 sprite->Play(lastPlayerDirection);
-                sprite->SetFlip(playerFlip);
+                // Flip was already set in the direction calculation for vertical shots
+                if (lastPlayerDirection == "Shoot") {
+                    sprite->SetFlip(playerFlip);
+                }
             } 
             else if (isMoving) {
+                // Always update player flip based on horizontal movement
+                if (transform->velocity.x < 0) {
+                    playerFlip = SDL_FLIP_HORIZONTAL;
+                }
+                else if (transform->velocity.x > 0) {
+                    playerFlip = SDL_FLIP_NONE;
+                }
+                
                 // Handle movement animations
                 if (transform->velocity.y < 0) {
                     sprite->Play("WalkUp");
+                    sprite->SetFlip(SDL_FLIP_NONE); // Never flip up animation
                 } 
                 else if (transform->velocity.y > 0) {
                     sprite->Play("WalkDown");
+                    sprite->SetFlip(SDL_FLIP_NONE); // Never flip down animation
                 }
                 else if (transform->velocity.x != 0) {
                     sprite->Play("Walk");
+                    sprite->SetFlip(playerFlip);
                 }
-                sprite->SetFlip(playerFlip);
             } 
             else if (wasShooting || (!isMoving && wasMoving)) {
                 // Just stopped shooting or moving - return to idle
-                // Determine idle animation based on last direction
                 sprite->Play("Idle");
                 sprite->SetFlip(playerFlip);
-            }
-
-            // Handle ESC to quit
-            if (keyState[SDL_SCANCODE_ESCAPE]) {
-                Game::isRunning = false;
             }
         }
 };
