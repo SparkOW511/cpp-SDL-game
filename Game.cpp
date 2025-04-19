@@ -1419,6 +1419,52 @@ void Game::update()
 
         // Enemy collision with projectiles and player
         for(auto& e : *enemies) {
+            // Enemy needs access to its transform for collision response
+            TransformComponent& enemyTransform = e->getComponent<TransformComponent>();
+
+            // --- Enemy Terrain Collision Check ---
+            for (auto& c : *colliders) {
+                SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+                SDL_Rect enemyCol = e->getComponent<ColliderComponent>().collider; // Get enemy collider AFTER its movement
+
+                if (Collision::AABB(cCol, enemyCol)) {
+                    // Calculate overlap (similar to player)
+                    float overlapX = 0.0f;
+                    float overlapY = 0.0f;
+                    float dx = (enemyCol.x + enemyCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
+                    float dy = (enemyCol.y + enemyCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
+                    float combinedHalfWidths = (enemyCol.w / 2.0f) + (cCol.w / 2.0f);
+                    float combinedHalfHeights = (enemyCol.h / 2.0f) + (cCol.h / 2.0f);
+                    overlapX = combinedHalfWidths - std::abs(dx);
+                    overlapY = combinedHalfHeights - std::abs(dy);
+
+                    bool collidedHorizontally = false;
+                    bool collidedVertically = false;
+
+                    // Resolve collision (Push enemy back)
+                    if (overlapX < overlapY) {
+                        collidedHorizontally = true;
+                        if (dx > 0) enemyTransform.position.x += overlapX;
+                        else enemyTransform.position.x -= overlapX;
+                        enemyTransform.velocity.x = 0; // Stop horizontal movement *for this frame* 
+                    } else {
+                        collidedVertically = true;
+                        if (dy > 0) enemyTransform.position.y += overlapY;
+                        else enemyTransform.position.y -= overlapY;
+                        enemyTransform.velocity.y = 0; // Stop vertical movement *for this frame*
+                    }
+                    
+                    // Notify AI component about the collision
+                    if (e->hasComponent<EnemyAIComponent>()) {
+                        e->getComponent<EnemyAIComponent>().notifyTerrainCollision(collidedHorizontally, collidedVertically);
+                    }
+
+                    // Update enemy's collider component immediately
+                    e->getComponent<ColliderComponent>().update();
+                }
+            }
+            // --- End Enemy Terrain Collision Check ---
+
             // Projectile collision
             for(auto& p : *projectiles) {
                 if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 

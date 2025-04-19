@@ -19,6 +19,12 @@ class EnemyAIComponent : public Component {
         SDL_RendererFlip lastFlip = SDL_FLIP_NONE; // Track last flip direction
         const char* currentAnimation = "Idle"; // Track current animation
 
+        // Collision state variables
+        bool isStuck = false;
+        Uint32 stuckTimer = 0; // Timer for how long to attempt unstuck maneuver
+        const Uint32 STUCK_DURATION = 500; // milliseconds
+        Vector2D unstuckDirection = {0,0};
+
         EnemyAIComponent(Manager& mManager) : manager(mManager) {}
 
         // Set the movement speed of the enemy
@@ -31,9 +37,62 @@ class EnemyAIComponent : public Component {
             sprite = &entity->getComponent<SpriteComponent>();
             lastPosition = transform->position;
             lastDirection = Vector2D(0, 1); // Default facing down
+            isStuck = false; // Ensure starts unstuck
+            stuckTimer = 0;
+        }
+
+        // Called from Game::update when enemy collides with terrain
+        void notifyTerrainCollision(bool collidedHorizontally, bool collidedVertically) {
+            if (!isStuck) { // Only trigger if not already stuck
+                isStuck = true;
+                stuckTimer = SDL_GetTicks() + STUCK_DURATION; // Set timer for unstuck duration
+                
+                // Determine an initial direction to move away from the collision
+                if (collidedHorizontally) {
+                    // Stuck horizontally, try moving vertically (prefer player's Y direction)
+                    auto& players = manager.getGroup(Game::groupPlayers);
+                    if (!players.empty()) {
+                        Vector2D playerPos = players[0]->getComponent<TransformComponent>().position;
+                        unstuckDirection = {0, (playerPos.y > transform->position.y) ? 1.0f : -1.0f };
+                    } else {
+                        unstuckDirection = {0, (rand() % 2 == 0) ? 1.0f : -1.0f }; // Random vertical if no player
+                    }
+                } else { // collidedVertically
+                    // Stuck vertically, try moving horizontally (prefer player's X direction)
+                    auto& players = manager.getGroup(Game::groupPlayers);
+                    if (!players.empty()) {
+                        Vector2D playerPos = players[0]->getComponent<TransformComponent>().position;
+                        unstuckDirection = {(playerPos.x > transform->position.x) ? 1.0f : -1.0f, 0 };
+                    } else {
+                        unstuckDirection = {(rand() % 2 == 0) ? 1.0f : -1.0f, 0 }; // Random horizontal if no player
+                    }
+                }
+            }
         }
 
         void update() override {
+            // Check if stuck timer has expired
+            if (isStuck && SDL_GetTicks() > stuckTimer) {
+                isStuck = false; 
+            }
+
+            // If stuck, perform unstuck maneuver instead of normal AI
+            if (isStuck) {
+                // Move in the determined unstuck direction
+                transform->position.x += unstuckDirection.x * moveSpeed * 0.8f; // Slightly slower unstuck move
+                transform->position.y += unstuckDirection.y * moveSpeed * 0.8f;
+                
+                // Use appropriate animation for unstuck movement
+                determineAnimation(unstuckDirection);
+                sprite->Play(currentAnimation);
+                if (std::abs(unstuckDirection.x) > std::abs(unstuckDirection.y)) {
+                    sprite->SetFlip(unstuckDirection.x > 0 ? SDL_FLIP_NONE : SDL_FLIP_HORIZONTAL);
+                    lastFlip = sprite->spriteFlip;
+                }
+                lastDirection = unstuckDirection; // Update facing direction
+                return; // Skip normal AI logic
+            }
+
             auto& players = manager.getGroup(Game::groupPlayers);
             
             // If there's no player, game is over, or a question is active, reset to idle and stop moving
