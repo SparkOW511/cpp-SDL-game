@@ -1,6 +1,6 @@
 all:
-	g++ -I ./src/include -L ./src/lib -o dejte-mi-3-jebem-vam-mater main.cpp Game.cpp TextureManager.cpp Map.cpp Vector2D.cpp Collision.cpp ECS.cpp AssetManager.cpp RandomPositionManager.cpp TransitionManager.cpp -lmingw32 -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lSDL2 -O3
+	g++ -I ./src/include -L ./src/lib -o seks main.cpp Game.cpp TextureManager.cpp Map.cpp Vector2D.cpp Collision.cpp ECS.cpp AssetManager.cpp RandomPositionManager.cpp TransitionManager.cpp -lmingw32 -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lSDL2 -O3
 d:
-	g++ -I ./src/include -L ./src/lib -o dejte-mi-3-jebem-vam-mater main.cpp Game.cpp TextureManager.cpp Map.cpp Vector2D.cpp Collision.cpp ECS.cpp AssetManager.cpp RandomPositionManager.cpp TransitionManager.cpp -lmingw32 -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lSDL2 -Og
-	./dejte-mi-3-jebem-vam-mater.exe
+	g++ -I ./src/include -L ./src/lib -o seks main.cpp Game.cpp TextureManager.cpp Map.cpp Vector2D.cpp Collision.cpp ECS.cpp AssetManager.cpp RandomPositionManager.cpp TransitionManager.cpp -lmingw32 -lSDL2main -lSDL2_image -lSDL2_ttf -lSDL2_mixer -lSDL2 -Og
+	./seks.exe
 

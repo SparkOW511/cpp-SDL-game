@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <random>
 #include <ctime>
+#include <fstream>
 
 // Global manager and entities
 Map* map;
@@ -61,19 +62,25 @@ Entity* Game::feedbackLabel = nullptr;
 int Game::currentLevel = 1;
 int Game::maxLevels = 4; // Set the maximum number of levels here
 bool Game::showingExitInstructions = false; // Initialize to false
-bool Game::level4MapChanged = false; // Initialize level4MapChanged
-bool Game::finalBossDefeated = false; // Initialize finalBossDefeated
-bool Game::scientistRescued = false; // Initialize scientistRescued
-bool Game::canRescueScientist = false; // Initialize canRescueScientist
-bool Game::needsRestart = false; // Initialize needsRestart flag
-bool Game::returnToMainMenu = false; // Initialize returnToMainMenu flag
-GameState Game::gameState = STATE_MAIN_MENU; // Start in main menu
-int Game::volumeLevel = 80; // Default volume level at 80%
-
-// Initialize timer variables
+GameState Game::gameState = STATE_MAIN_MENU; // Initialize to main menu
+bool Game::level4MapChanged = false;
+bool Game::finalBossDefeated = false;
+bool Game::scientistRescued = false;
+bool Game::canRescueScientist = false;
+bool Game::needsRestart = false;
+bool Game::returnToMainMenu = false;
 Uint32 Game::gameStartTime = 0;
 Uint32 Game::gameplayTime = 0;
 Entity* Game::timerLabel = nullptr;
+int Game::volumeLevel = 90; // Default volume level to 90%
+
+// Replay related static variables
+bool Game::isRecordingPositions = false;
+bool Game::isReplaying = false;
+int Game::replayPositionIndex = 0;
+Vector2D Game::lastRecordedPosition = Vector2D(0, 0);
+Uint32 Game::replayFrameTime = 20; // Target ~60 FPS playback (1000ms / 60)
+Uint32 Game::lastReplayFrameTime = 0;
 
 // Main menu variables
 Entity* menuTitle = nullptr;
@@ -158,7 +165,7 @@ Game::Game()
         {"Which company created the first commercially successful mouse?", {"Microsoft", "Apple", "IBM", "Logitech"}, 1},
         
         {"What is the result of 1 + 1 in binary?", {"0", "1", "10", "11"}, 2},
-        {"What is the value of π (pi) rounded to two decimal places?", {"3.41", "3.14", "3.50", "3.16"}, 1},
+        {"What is the value of pi rounded to two decimal places?", {"3.41", "3.14", "3.50", "3.16"}, 1},
         {"In Boolean algebra, what is the result of TRUE AND FALSE?", {"TRUE", "FALSE", "NULL", "ERROR"}, 1},
         {"What is the solution to x in the equation 2x + 5 = 15?", {"5", "10", "7.5", "20"}, 0},
         {"What is the square root of 144?", {"10", "12", "14", "16"}, 1},
@@ -226,7 +233,8 @@ void Game::initEntities() {
     // Setup player entity with random position
     player->addComponent<TransformComponent>(playerSpawnPos.x, playerSpawnPos.y, 32, 32, 3);
     player->addComponent<SpriteComponent>("player", true);
-    player->addComponent<ColliderComponent>("player");
+    // Use the specific constructor for player collider dimensions and offset (scaled)
+    player->addComponent<ColliderComponent>("player", 21 * 3, 29 * 3, 6 * 3, 4 * 3);
     player->addComponent<HealthComponent>(100);
     player->addComponent<AmmoComponent>(30, 10);
     player->addComponent<KeyboardController>();
@@ -383,11 +391,21 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
 void Game::handleEvents()
 {
     SDL_PollEvent(&event);
+    
     switch(event.type) {
         case SDL_QUIT:
             isRunning = false;
             break;
+            
         case SDL_KEYDOWN:
+            // Handle replay mode ESC key to exit
+            if (gameState == STATE_REPLAY && event.key.keysym.sym == SDLK_ESCAPE) {
+                // Stop replay and return to main menu
+                isReplaying = false;
+                returnToMainMenu = true;
+                break;
+            }
+            
             if (gameState == STATE_MAIN_MENU) {
                 // Handle menu navigation
                 switch(event.key.keysym.sym) {
@@ -1120,8 +1138,34 @@ void Game::update()
             updateEndScreen();
             break;
             
+        case STATE_PAUSE:
+            // Update pause menu elements
+            updatePauseMenu();
+            break;
+            
+        case STATE_SETTINGS:
+            // Update settings menu elements
+            updateSettingsMenu();
+            break;
+            
+        case STATE_REPLAY:
+            // Update replay ONLY
+            updateReplay();
+            // Skip manager.refresh() and manager.update() for replay state
+            // Refresh is not needed as replay handles its entity directly
+            // Update is skipped to prevent interference with replay positioning
+            break; 
+            
         case STATE_GAME:
-            // Update gameplay timer
+            // Always refresh entity manager first in GAME state
+            manager.refresh();
+            
+            // Record player position if recording is enabled and player exists
+            if (player && player->isActive() && !isReplaying) { // Ensure not replaying
+                recordPlayerPosition();
+            }
+            
+            // Update timer
             if (gameStartTime > 0 && !gameOver) {
                 gameplayTime = currentTime - gameStartTime;
                 
@@ -1143,9 +1187,6 @@ void Game::update()
                     timerLabel->getComponent<UILabel>().SetPosition(xPos, 20); // Keep at top
                 }
             }
-            
-            // Always refresh entity manager for proper lifecycle management
-            manager.refresh();
             
             // Handle transition if active
             if (transitionManager.isTransitioning()) {
@@ -1265,11 +1306,12 @@ void Game::update()
         return;
     }
     
+    // Run manager update ONLY for STATE_GAME when not paused/game over
+    manager.update();
+    
     // Continue with regular game update logic - only if player exists
     if (player != nullptr && player->isActive() && gameState == STATE_GAME) {
         Vector2D playerPos = player->getComponent<TransformComponent>().position;
-        
-        manager.update();
         
         // Get updated player position after manager.update()
         TransformComponent& playerTransform = player->getComponent<TransformComponent>();
@@ -1332,13 +1374,46 @@ void Game::update()
         // Player collision with terrain
         for(auto& c : *colliders) {
             SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+            SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider; // Get player collider AFTER movement
             
-            // Check if collision happened
-            if(Collision::AABB(cCol, playerCol)) {
-                // Simply restore player to previous position before movement
-                player->getComponent<TransformComponent>().position = playerPos;
-                // Update collider position
-                player->getComponent<ColliderComponent>().update();
+            if(Collision::AABB(cCol, updatedPlayerCol)) {
+                // Calculate overlap
+                float overlapX = 0.0f;
+                float overlapY = 0.0f;
+
+                // Calculate the distance between centers
+                float dx = (updatedPlayerCol.x + updatedPlayerCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
+                float dy = (updatedPlayerCol.y + updatedPlayerCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
+
+                // Calculate the minimum non-overlapping distances
+                float combinedHalfWidths = (updatedPlayerCol.w / 2.0f) + (cCol.w / 2.0f);
+                float combinedHalfHeights = (updatedPlayerCol.h / 2.0f) + (cCol.h / 2.0f);
+
+                // Calculate overlap on each axis
+                overlapX = combinedHalfWidths - std::abs(dx);
+                overlapY = combinedHalfHeights - std::abs(dy);
+
+                // Resolve collision based on the axis with the smallest overlap
+                if (overlapX < overlapY) {
+                    // Push horizontally
+                    if (dx > 0) { // Player is to the right of collider
+                        playerTransform.position.x += overlapX;
+                    } else { // Player is to the left of collider
+                        playerTransform.position.x -= overlapX;
+                    }
+                    // playerTransform.velocity.x = 0; // REMOVED: Allow input to control velocity
+                } else {
+                    // Push vertically
+                    if (dy > 0) { // Player is below collider
+                        playerTransform.position.y += overlapY;
+                    } else { // Player is above collider
+                        playerTransform.position.y -= overlapY;
+                    }
+                    // playerTransform.velocity.y = 0; // REMOVED: Allow input to control velocity
+                }
+
+                // Update player's collider component immediately after position change
+                player->getComponent<ColliderComponent>().update(); 
             }
         }
 
@@ -1499,8 +1574,7 @@ void Game::update()
     }
 }
 
-void Game::render()
-{
+void Game::render() {
     // Render based on current game state
     switch (gameState) {
         case STATE_MAIN_MENU:
@@ -1517,6 +1591,10 @@ void Game::render()
             
         case STATE_SETTINGS:
             renderSettingsMenu();
+            break;
+            
+        case STATE_REPLAY:
+            renderReplay();
             break;
             
         case STATE_GAME:
@@ -1876,6 +1954,10 @@ void Game::advanceToNextLevel() {
         transitionLabel = &manager.addEntity();
         transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
     }
+    
+    // Continue recording positions in the next level
+    // Reset last recorded position for the next level
+    lastRecordedPosition = Vector2D(0, 0);
 }
 
 void Game::initMainMenu() {
@@ -2053,6 +2135,12 @@ void Game::startGame() {
     // Reset used questions when starting a new game
     resetUsedQuestions();
     
+    // Clear previous recorded positions and enable recording
+    std::ofstream positionFile("assets/position.txt", std::ios::trunc);
+    positionFile.close();
+    isRecordingPositions = true;
+    lastRecordedPosition = Vector2D(0, 0);
+    
     // Change game state
     gameState = STATE_GAME;
     
@@ -2136,7 +2224,7 @@ void Game::initEndScreen(bool victory) {
     endMessage->addComponent<UILabel>(0, 300, message, "font1", white);
     
     endRestartButton->addComponent<UILabel>(0, 450, "RESTART GAME", "font1", white);
-    endReplayButton->addComponent<UILabel>(0, 500, "REPLAY LEVEL", "font1", white);  // Add replay button label
+    endReplayButton->addComponent<UILabel>(0, 500, "REPLAY (NAJBOLJ NEPOTREBNA FUNKCIJA, KI NE DELA)", "font1", white);  // Add replay button label
     endMenuButton->addComponent<UILabel>(0, 550, "MAIN MENU", "font1", white);  // Adjust position
     
     // Center all elements horizontally
@@ -2304,6 +2392,13 @@ void Game::togglePause() {
         selectedPauseItem = PAUSE_RESUME;
         pauseHighlightActive = false;
         pauseItemSelected = false;
+        
+        // Force the player's KeyboardController to require a mouse release before shooting
+        if (player != nullptr && player->hasComponent<KeyboardController>()) {
+            KeyboardController& controller = player->getComponent<KeyboardController>();
+            controller.requireMouseRelease = true;
+            controller.gameStartTime = SDL_GetTicks(); // Reset the cooldown timer
+        }
     }
 }
 
@@ -2782,6 +2877,157 @@ void Game::applySettings() {
 // Add this at the end of the file
 
 void Game::replay() {
-    // This function currently does nothing
-    // Will be implemented later to replay the current level
+    // Reset game state for replay
+    gameState = STATE_REPLAY;
+    
+    // Always start replay from level 1 regardless of current level
+    readAllPositionsFromFile();
+}
+
+void Game::readAllPositionsFromFile() {
+    allReplayPositionsByLevel.clear(); 
+    replayPositionIndex = 0;           
+    currentReplayLevel = 1;            
+
+    std::ifstream posFile("assets/position.txt");
+    if (!posFile.is_open()) {
+        std::cerr << "Failed to open position file for replay!" << std::endl;
+        isReplaying = false; 
+        return;
+    }
+
+    std::string line;
+    int minLevelFound = -1; 
+
+    while (std::getline(posFile, line)) {
+        std::stringstream ss(line);
+        std::string xStr, yStr, lvlStr;
+        if (std::getline(ss, xStr, ',') && std::getline(ss, yStr, ',') && std::getline(ss, lvlStr, ',')) {
+            try {
+                int x = std::stoi(xStr); int y = std::stoi(yStr); int lvl = std::stoi(lvlStr);
+                allReplayPositionsByLevel[lvl].push_back(Vector2D(x, y));
+                if (minLevelFound == -1 || lvl < minLevelFound) { minLevelFound = lvl; }
+            } catch (const std::exception&) { /* Skip */ }
+        } else {
+             std::stringstream oldFormat(line); int x, y, lvl;
+             if (oldFormat >> x >> y >> lvl) {
+                 allReplayPositionsByLevel[lvl].push_back(Vector2D(x, y));
+                 if (minLevelFound == -1 || lvl < minLevelFound) { minLevelFound = lvl; }
+             }
+        }
+    }
+    posFile.close();
+
+    if (allReplayPositionsByLevel.empty()) {
+        std::cerr << "No valid positions found in position file." << std::endl;
+        isReplaying = false; return;
+    }
+
+    if (minLevelFound != -1 && allReplayPositionsByLevel.count(minLevelFound) > 0 && !allReplayPositionsByLevel[minLevelFound].empty()) {
+         currentReplayLevel = minLevelFound;
+    } else {
+        for (const auto& pair : allReplayPositionsByLevel) { if (!pair.second.empty()) { currentReplayLevel = pair.first; break; } }
+        if (allReplayPositionsByLevel[currentReplayLevel].empty()) {
+             std::cerr << "No level with valid positions found to start replay." << std::endl;
+             isReplaying = false; return;
+        }
+    }
+
+    isReplaying = true;
+    lastReplayFrameTime = SDL_GetTicks();
+    gameState = STATE_REPLAY; 
+    loadLevel(currentReplayLevel);
+    Vector2D startPos = allReplayPositionsByLevel[currentReplayLevel][0];
+    // Removed debug print
+
+    if (replayEntity) { replayEntity->destroy(); replayEntity = nullptr; }
+    replayEntity = &manager.addEntity();
+    replayEntity->addComponent<TransformComponent>(startPos.x, startPos.y, 32, 32, 3);
+    replayEntity->addComponent<SpriteComponent>("player", true);
+    replayEntity->addGroup(Game::groupPlayers);
+    // Removed debug print
+
+    if (timerLabel) { timerLabel->destroy(); timerLabel = nullptr; }
+    timerLabel = &manager.addEntity();
+    timerLabel->addComponent<UILabel>(20, 20, " ", "font1", white); 
+    timerLabel->addGroup(Game::groupUI);
+    replayEntity->getComponent<SpriteComponent>().Play("Idle");
+}
+
+void Game::updateReplay() {
+    if (!isReplaying || !replayEntity || !replayEntity->hasComponent<TransformComponent>()) return;
+    // Removed debug print
+
+    if (replayEntity->hasComponent<SpriteComponent>()) { replayEntity->getComponent<SpriteComponent>().update(); }
+    Uint32 currentTime = SDL_GetTicks();
+    if (replayEntity) { /* Camera logic ... */ }
+
+    if (allReplayPositionsByLevel.find(currentReplayLevel) == allReplayPositionsByLevel.end() || allReplayPositionsByLevel[currentReplayLevel].empty()) { /* End replay logic ... */ return; }
+    const auto& currentLevelPositions = allReplayPositionsByLevel[currentReplayLevel];
+    if (timerLabel) { /* UI update logic ... */ }
+
+    if (currentTime - lastReplayFrameTime >= replayFrameTime) {
+        if (replayPositionIndex >= currentLevelPositions.size()) { /* Level transition logic ... */ return; }
+
+        auto& transform = replayEntity->getComponent<TransformComponent>();
+        float currentX = transform.position.x; float currentY = transform.position.y;
+        Vector2D nextPos = currentLevelPositions[replayPositionIndex];
+        float deltaX = nextPos.x - currentX; float deltaY = nextPos.y - currentY;
+
+        transform.position.x = nextPos.x; transform.position.y = nextPos.y;
+        transform.velocity.x = 0; transform.velocity.y = 0;
+
+        bool isFinalPositionInLevel = (replayPositionIndex == currentLevelPositions.size() - 1);
+        if (isFinalPositionInLevel) { /* Idle animation logic ... */ }
+        else { /* Movement animation logic ... */ }
+
+        replayPositionIndex++;
+        lastReplayFrameTime = currentTime;
+    }
+}
+
+void Game::renderReplay() {
+    SDL_RenderClear(renderer);
+    for(auto& t : *tiles) t->draw();
+
+    if (replayEntity && replayEntity->hasComponent<TransformComponent>()) {
+        // Camera is updated in updateReplay now, just use it
+        // Render the replay entity
+        replayEntity->draw();
+    }
+
+    if (timerLabel) {
+        // Position is updated in updateReplay
+        timerLabel->draw();
+    }
+
+    SDL_RenderPresent(renderer);
+}
+
+void Game::recordPlayerPosition() {
+    // Only record positions if a player exists and recording is enabled
+    if (player && isRecordingPositions && gameState == STATE_GAME) {
+        // Get current player position
+        Vector2D currentPosition = player->getComponent<TransformComponent>().position;
+        
+        // Record if position has changed (more sensitive threshold)
+        const float recordThreshold = 0.1f;
+        if (std::abs(currentPosition.x - lastRecordedPosition.x) >= recordThreshold || 
+            std::abs(currentPosition.y - lastRecordedPosition.y) >= recordThreshold) {
+            
+            // Open file in append mode
+            std::ofstream positionFile("assets/position.txt", std::ios::app);
+            
+            if (positionFile.is_open()) {
+                // Format: x,y,level with commas as separators for clarity
+                positionFile << static_cast<int>(currentPosition.x) << "," 
+                             << static_cast<int>(currentPosition.y) << "," 
+                             << currentLevel << std::endl;
+                
+                // Update last recorded position
+                lastRecordedPosition = currentPosition;
+            }
+            positionFile.close();
+        }
+    }
 }

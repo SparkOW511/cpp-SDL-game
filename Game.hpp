@@ -11,6 +11,7 @@
 #include "Vector2D.hpp"
 #include "RandomPositionManager.hpp"
 #include "TransitionManager.hpp"
+#include <map> // Add this include for std::map
 
 class ColliderComponent;
 class AssetManager;
@@ -28,7 +29,8 @@ enum GameState {
     STATE_PAUSE,
     STATE_SETTINGS,
     STATE_GAME_OVER,
-    STATE_END_SCREEN
+    STATE_END_SCREEN,
+    STATE_REPLAY // Added replay state
 };
 
 // Menu item enumeration
@@ -142,6 +144,14 @@ class Game {
         static bool needsRestart;            // Flag to indicate game needs restart
         static bool returnToMainMenu;        // Flag to indicate return to main menu
 
+        // Replay related variables
+        static bool isRecordingPositions;    // Flag to record player positions
+        static bool isReplaying;             // Flag that indicates we're in replay mode
+        static int replayPositionIndex;      // Index within the current level's positions
+        static Vector2D lastRecordedPosition; // Last position that was recorded
+        static Uint32 replayFrameTime;       // Time to wait between replay frames
+        static Uint32 lastReplayFrameTime;   // Last frame time for replay timing
+
         // Timer related methods and variables
         static Uint32 gameStartTime;
         static Uint32 gameplayTime;
@@ -164,6 +174,12 @@ class Game {
 
         // Volume settings (0-100)
         static int volumeLevel;
+
+        // Replay related entities
+        Entity* replayEntity = nullptr;       // Entity used for replay visualization
+        // Use a map to store positions per level
+        std::map<int, std::vector<Vector2D>> allReplayPositionsByLevel;
+        int currentReplayLevel = 1; // Track the level currently being replayed
 
     private:
         int count = 0;
@@ -225,6 +241,12 @@ class Game {
 
         // Reset question tracking when restarting or changing levels
         void resetUsedQuestions() { usedQuestions.clear(); }
+        
+        // Position recording and replay functions
+        void recordPlayerPosition();
+        void readAllPositionsFromFile();      // New function to load all positions
+        void updateReplay();
+        void renderReplay();
 
         // Pause menu entities
         Entity* pauseTitle = nullptr;

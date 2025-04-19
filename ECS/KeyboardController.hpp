@@ -31,7 +31,12 @@ class KeyboardController : public Component {
         
         // Cooldown tracking after entering game state
         Uint32 gameStartTime = 0;
-        const Uint32 gameStartCooldown = 500; // 500ms cooldown after entering game
+        const Uint32 gameStartCooldown = 250; // Reduced from 500 to 250 ms for faster state transition
+        
+        // Track state transitions and mouse button state
+        GameState previousGameState = STATE_MAIN_MENU;
+        bool wasMouseButtonDown = false;
+        bool requireMouseRelease = true; // Force mouse release after state transitions
 
         void init() override {
             transform = &entity->getComponent<TransformComponent>();
@@ -53,6 +58,9 @@ class KeyboardController : public Component {
             facingDown = false;
             playerDirection = "Idle";
             lastPlayerDirection = "Idle";
+            previousGameState = Game::gameState;
+            wasMouseButtonDown = false;
+            requireMouseRelease = true; // Initially require a mouse release
         }
 
         void update() override {
@@ -62,6 +70,29 @@ class KeyboardController : public Component {
                 transform->velocity.x = 0;
                 transform->velocity.y = 0;
                 return;
+            }
+            
+            // Get current state of mouse button
+            int mouseX, mouseY;
+            Uint32 mouseState = SDL_GetMouseState(&mouseX, &mouseY);
+            bool isMouseButtonDown = (mouseState & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+            
+            // Check for state changes
+            if (Game::gameState != previousGameState) {
+                // Reset cooldown timer on state change
+                gameStartTime = SDL_GetTicks();
+                
+                // If transitioning TO game state (e.g., from pause menu), require mouse release
+                if (Game::gameState == STATE_GAME) {
+                    requireMouseRelease = true;
+                }
+                
+                previousGameState = Game::gameState;
+            }
+            
+            // If mouse button was released, clear the requirement flag
+            if (wasMouseButtonDown && !isMouseButtonDown) {
+                requireMouseRelease = false;
             }
             
             const Uint8* keyState = SDL_GetKeyboardState(NULL);
@@ -125,10 +156,6 @@ class KeyboardController : public Component {
                     facingDown = false;
                 }
             }
-            
-            // Get mouse position and calculate direction relative to player
-            int mouseX, mouseY;
-            SDL_GetMouseState(&mouseX, &mouseY);
             
             // Convert mouse screen coordinates to world coordinates
             mouseX += Game::camera.x;
@@ -205,29 +232,33 @@ class KeyboardController : public Component {
             }
 
             // Handle shooting with left mouse button
-            // Check if in Game state before allowing shooting
-            Uint32 mouseButtons = SDL_GetMouseState(NULL, NULL);
             Uint32 currentTime = SDL_GetTicks();
             bool startCooldownPassed = (currentTime - gameStartTime >= gameStartCooldown);
             
-            // Reset cooldown timer when game state changes to or from STATE_GAME
+            // Consider the cooldown passed when player starts moving
             if (Game::gameState == STATE_GAME && isMoving) {
-                // Consider the cooldown passed when player starts moving
                 startCooldownPassed = true;
             }
             
-            if (mouseButtons & SDL_BUTTON(SDL_BUTTON_LEFT) && 
-                Game::gameState == STATE_GAME && 
-                !Game::questionActive && 
-                !Game::gameOver && 
-                startCooldownPassed) {
-                
-                bool canShoot = true;
+            // Only allow shooting if all conditions are met
+            bool canShootNow = Game::gameState == STATE_GAME && 
+                              !Game::questionActive && 
+                              !Game::gameOver && 
+                              isMouseButtonDown && 
+                              !requireMouseRelease && 
+                              startCooldownPassed;
+            
+            // Check if this is a new press or if cooldown has passed
+            bool cooldownPassed = (currentTime - lastShotTime >= shotCooldown);
+            bool isNewPress = isMouseButtonDown && !wasMouseButtonDown;
+            
+            if (canShootNow && (isNewPress || cooldownPassed)) {
+                bool hasAmmo = true;
                 if (ammo != nullptr) {
-                    canShoot = ammo->canShoot();
+                    hasAmmo = ammo->canShoot();
                 }
                 
-                if (currentTime - lastShotTime >= shotCooldown && canShoot) {
+                if (hasAmmo) {
                     // Set shooting state
                     isShooting = true;
                     
@@ -250,6 +281,9 @@ class KeyboardController : public Component {
                     lastShotTime = currentTime;
                 }
             }
+            
+            // Update mouse button state for next frame
+            wasMouseButtonDown = isMouseButtonDown;
             
             // Animation handling - update player appearance based on current state
             if (isShooting) {

@@ -10,6 +10,8 @@ class ColliderComponent : public Component {
     
     SDL_Rect collider;
     std::string tag;
+    int offsetX = 0;
+    int offsetY = 0;
 
     SDL_Texture* tex;
     SDL_Rect srcR, destR;
@@ -18,6 +20,10 @@ class ColliderComponent : public Component {
 
     ColliderComponent(std::string t){
         tag = t;
+        // Dimensions will be set from transform in init
+        collider.w = collider.h = 0;
+        offsetX = 0;
+        offsetY = 0;
         tex = nullptr;
     }
 
@@ -27,6 +33,15 @@ class ColliderComponent : public Component {
         collider.y = ypos;
         collider.w = size;
         collider.h = size;
+        tex = nullptr;
+    }
+
+    ColliderComponent(std::string t, int w, int h, int offX, int offY) {
+        tag = t;
+        collider.w = w; // Use provided width
+        collider.h = h; // Use provided height
+        offsetX = offX; // Use provided offset X
+        offsetY = offY; // Use provided offset Y
         tex = nullptr;
     }
 
@@ -43,12 +58,19 @@ class ColliderComponent : public Component {
         }
         transform = &entity->getComponent<TransformComponent>();
         
-        // If this is a player or entity collider, initialize based on transform
-        if(tag != "terrain") {
-            collider.x = static_cast<int>(transform->position.x);
-            collider.y = static_cast<int>(transform->position.y);
-            collider.w = transform->width * transform->scale;
-            collider.h = transform->height * transform->scale;
+        // If collider dimensions weren't set by a specific constructor, get them from transform
+        if (collider.w == 0 && collider.h == 0 && tag != "terrain") {
+             collider.w = transform->width * transform->scale;
+             collider.h = transform->height * transform->scale;
+             // Ensure offsets are 0 if using transform dimensions
+             offsetX = 0;
+             offsetY = 0;
+        }
+
+        // Set initial position based on transform and potentially provided offsets
+        if (tag != "terrain") {
+            collider.x = static_cast<int>(transform->position.x) + offsetX;
+            collider.y = static_cast<int>(transform->position.y) + offsetY;
         }
 
         tex = TextureManager::LoadTexture("assets/colliderTex.png");
@@ -58,13 +80,10 @@ class ColliderComponent : public Component {
 
     void update() override {
         if(tag != "terrain") {
-            collider.x = static_cast<int>(transform->position.x);
-            collider.y = static_cast<int>(transform->position.y);
-            collider.w = transform->width * transform->scale;
-            collider.h = transform->height * transform->scale;
+            collider.x = static_cast<int>(transform->position.x) + offsetX;
+            collider.y = static_cast<int>(transform->position.y) + offsetY;
         }
         
-        // Update destination rectangle for drawing, accounting for camera
         destR.x = collider.x - Game::camera.x;
         destR.y = collider.y - Game::camera.y;
         destR.w = collider.w;
