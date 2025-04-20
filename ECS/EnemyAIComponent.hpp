@@ -71,6 +71,12 @@ class EnemyAIComponent : public Component {
         }
 
         void update() override {
+            // ---> ADD NULL CHECK FOR TRANSFORM/SPRITE <---
+            if (!transform || !sprite) {
+                return;
+            }
+            // ---------------------------------------------
+
             // Check if stuck timer has expired
             if (isStuck && SDL_GetTicks() > stuckTimer) {
                 isStuck = false; 
@@ -93,10 +99,8 @@ class EnemyAIComponent : public Component {
                 return; // Skip normal AI logic
             }
 
-            auto& players = manager.getGroup(Game::groupPlayers);
-            
-            // If there's no player, game is over, or a question is active, reset to idle and stop moving
-            if (players.empty() || Game::gameOver || Game::questionActive) {
+            // Use the global player pointer directly for safety after load
+            if (!player || !player->isActive() || Game::gameOver || Game::questionActive) {
                 // Play idle animation
                 sprite->Play("Idle");
                 currentAnimation = "Idle";
@@ -106,7 +110,7 @@ class EnemyAIComponent : public Component {
                 return;
             }
 
-            auto& player = players[0];
+            // Player is guaranteed to be valid here due to the check above
             Vector2D playerPos = player->getComponent<TransformComponent>().position;
             Vector2D enemyPos = transform->position;
             Vector2D direction = playerPos - enemyPos;

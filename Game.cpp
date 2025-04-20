@@ -10,6 +10,10 @@
 #include <random>
 #include <ctime>
 #include <fstream>
+#include <vector>  // Needed for storing dynamic lists of enemies/objects
+#include <set>     // Needed for used questions
+#include <string>  // Needed for object types and scientist state
+#include <utility> // Needed for pairs (optional, could use structs)
 
 // Global manager and entities
 Map* map;
@@ -126,6 +130,51 @@ int selectedSettingsItem = SETTINGS_VOLUME;
 bool settingsHighlightActive = false;
 bool settingsItemSelected = false;
 bool draggingVolumeSlider = false;
+
+// Helper to write a string to a binary file
+void writeString(std::ofstream& file, const std::string& str) {
+    size_t len = str.length();
+    file.write(reinterpret_cast<const char*>(&len), sizeof(len));
+    file.write(str.c_str(), len);
+}
+
+// Helper to read a string from a binary file
+bool readString(std::ifstream& file, std::string& str) {
+    size_t len;
+    file.read(reinterpret_cast<char*>(&len), sizeof(len));
+    if (!file || file.gcount() != sizeof(len)) return false; // Check read success and size
+
+    // Protect against excessively large strings potentially indicating corrupted data
+    if (len > 1024) { // Set a reasonable limit (e.g., 1KB for object types)
+        return false;
+    }
+
+    str.resize(len);
+    // Check if resize was successful (might fail for very large len)
+    if (str.length() != len) {
+         return false;
+    }
+
+    // Only read if len > 0 to avoid issues with &str[0] on empty strings
+    if (len > 0) {
+        file.read(&str[0], len);
+        if (!file || file.gcount() != len) return false; // Check read success and size
+    }
+    return true;
+}
+
+// Simple struct to hold enemy data for saving/loading
+struct EnemySaveData {
+    float x, y;
+    int health;
+    bool isBoss; // To differentiate the final boss
+};
+
+// Simple struct to hold object data for saving/loading
+struct ObjectSaveData {
+    float x, y;
+    std::string type; // "clue", "magazine", "healthpotion", "scientist", "cactus"
+};
 
 Game::Game()
 {
@@ -1029,6 +1078,9 @@ void Game::handleEvents()
 
 void Game::update()
 {
+    // --- START POST-LOAD DEBUGGING ---
+    // --- END POST-LOAD DEBUGGING ---
+
     Uint32 currentTime = SDL_GetTicks();
     float deltaTime = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
@@ -1243,15 +1295,48 @@ void Game::update()
     }
     
     for(auto& e : *enemies) {
-        if (e->hasComponent<SpriteComponent>()) {
-            e->getComponent<SpriteComponent>().update();
+        // Add safety check for null or inactive enemy pointers
+        if (!e || !e->isActive()) {
+            continue; 
         }
-        // Continue enemy movement animations if not in question mode
-        if (!questionActive && !gameOver && e->hasComponent<EnemyAIComponent>()) {
-            e->getComponent<EnemyAIComponent>().update();
-        } else if ((questionActive || gameOver) && e->hasComponent<SpriteComponent>()) {
-            // Ensure enemies stay in idle animation during question mode or game over
-            e->getComponent<SpriteComponent>().Play("Idle");
+
+        // Check and update SpriteComponent
+        if (e->hasComponent<SpriteComponent>()) {
+            try {
+                 e->getComponent<SpriteComponent>().update();
+            } catch (const std::exception& ex) {
+                 // Keep try/catch? User didn't specify. Keep for now.
+                 std::cerr << "Exception during SpriteComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
+            } catch (...) {
+                 std::cerr << "Unknown exception during SpriteComponent::update()." << std::endl; // Keep non-debug error
+            }
+        } else {
+        }
+
+        // Check and update EnemyAIComponent or set Idle animation
+        if (!questionActive && !gameOver) {
+            if (e->hasComponent<EnemyAIComponent>()) {
+                 // ---> ADD PLAYER CHECK HERE <---
+                 if (!player || !player->isActive()) {
+                 } else {
+                    try {
+                        e->getComponent<EnemyAIComponent>().update();
+                    } catch (const std::exception& ex) {
+                        std::cerr << "Exception during EnemyAIComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
+                    } catch (...) {
+                        std::cerr << "Unknown exception during EnemyAIComponent::update()." << std::endl; // Keep non-debug error
+                    }
+                 }
+            } else {
+            }
+        } else if (e->hasComponent<SpriteComponent>()) {
+            try {
+                e->getComponent<SpriteComponent>().Play("Idle");
+            } catch (const std::exception& ex) {
+                 std::cerr << "Exception during SpriteComponent::Play('Idle'): " << ex.what() << std::endl; // Keep non-debug error
+            } catch (...) {
+                 std::cerr << "Unknown exception during SpriteComponent::Play('Idle')." << std::endl; // Keep non-debug error
+            }
         }
     }
     
@@ -1354,6 +1439,7 @@ void Game::update()
         // Handle object collisions
         if (objectCollisionsEnabled) {
             for (auto& o : *objects) {
+                // if (!o || !o->isActive()) continue; // Basic safety check - Keep? Seems reasonable.
                 if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
                                 o->getComponent<ColliderComponent>().collider)) {
                     if (o->getComponent<ColliderComponent>().tag == "clue") {
@@ -1526,7 +1612,11 @@ void Game::update()
                     
                     // Create and load the new map
                     map = new Map(terrainTexture, 2, 32, manager);
-                    map->LoadMap(mapPath, 60, 34);
+                    map->LoadMap(mapPath, 60, 34);  // Call directly without condition
+                    // If you need error handling:
+                    if (!map) {
+                        throw std::runtime_error("Failed to create map");
+                    }
                     
                     // Allow the manager to do a refresh to properly clean up destroyed entities
                     manager.refresh();
@@ -1617,6 +1707,15 @@ void Game::update()
             
         default:
             break;
+    }
+
+    // Handle feedback message timeout (moved outside game state switch for consistency)
+    if (showFeedback && feedbackLabel && feedbackLabel->hasComponent<UILabel>()) {
+        // For regular feedback from questions
+        if (currentTime - feedbackStartTime >= feedbackDuration) {
+            showFeedback = false;
+            feedbackLabel->getComponent<UILabel>().SetLabelText("", "font1", white);
+        }
     }
 }
 
@@ -2241,11 +2340,371 @@ void Game::startGame() {
 }
 
 void Game::loadGame() {
-    // This is a stub for future implementation
-    // For now, it will just start a new game
-    // In a real implementation, this would load saved game data
-    std::cout << "Load game not implemented yet. Starting new game instead." << std::endl;
-    startGame();
+    std::ifstream saveFile("assets/savegame.bin", std::ios::binary);
+    if (!saveFile.is_open()) {
+        std::cout << "No save file found or could not open. Starting new game." << std::endl;
+        startGame();
+        return;
+    }
+    
+    // Make sure assets manager exists before loading
+    if (!assets) {
+        std::cerr << "Assets manager is null. Cannot load game." << std::endl;
+        startGame();
+        return;
+    }
+
+    try {
+        // --- Read Data ---
+        float playerX, playerY;
+        int playerHealth, playerCurrentAmmo, playerMaxAmmo;
+        int loadedClues, loadedLevel;
+        Uint32 loadedGameplayTime;
+        bool loadedLvl4MapChanged, loadedFinalBossDefeated, loadedScientistRescued, loadedCanRescueScientist;
+        std::vector<int> loadedUsedQuestions;
+        std::vector<EnemySaveData> loadedEnemyData;
+        std::vector<ObjectSaveData> loadedObjectData;
+
+        bool loadSuccess = true;
+
+        // Player Data
+        saveFile.read(reinterpret_cast<char*>(&playerX), sizeof(playerX));
+        saveFile.read(reinterpret_cast<char*>(&playerY), sizeof(playerY));
+        saveFile.read(reinterpret_cast<char*>(&playerHealth), sizeof(playerHealth));
+        saveFile.read(reinterpret_cast<char*>(&playerCurrentAmmo), sizeof(playerCurrentAmmo));
+        saveFile.read(reinterpret_cast<char*>(&playerMaxAmmo), sizeof(playerMaxAmmo));
+        loadSuccess &= saveFile.good();
+
+        // Game State
+        saveFile.read(reinterpret_cast<char*>(&loadedClues), sizeof(loadedClues));
+        saveFile.read(reinterpret_cast<char*>(&loadedLevel), sizeof(loadedLevel));
+        saveFile.read(reinterpret_cast<char*>(&loadedGameplayTime), sizeof(loadedGameplayTime));
+        saveFile.read(reinterpret_cast<char*>(&loadedLvl4MapChanged), sizeof(loadedLvl4MapChanged));
+        saveFile.read(reinterpret_cast<char*>(&loadedFinalBossDefeated), sizeof(loadedFinalBossDefeated));
+        saveFile.read(reinterpret_cast<char*>(&loadedScientistRescued), sizeof(loadedScientistRescued));
+        saveFile.read(reinterpret_cast<char*>(&loadedCanRescueScientist), sizeof(loadedCanRescueScientist));
+        loadSuccess &= saveFile.good();
+
+        // Validate loaded level
+        if (loadedLevel < 1 || loadedLevel > maxLevels) {
+            std::cerr << "Invalid level in save file: " << loadedLevel << std::endl;
+            loadSuccess = false;
+        }
+
+        // Used Questions
+        size_t numUsedQuestions;
+        saveFile.read(reinterpret_cast<char*>(&numUsedQuestions), sizeof(numUsedQuestions));
+        loadSuccess &= saveFile.good();
+        
+        // Validate question count to prevent buffer overflows
+        if (numUsedQuestions > 100) { // Reasonable upper limit for questions
+            std::cerr << "Too many used questions in save: " << numUsedQuestions << std::endl;
+            loadSuccess = false;
+        }
+        
+        if (loadSuccess) {
+            loadedUsedQuestions.resize(numUsedQuestions);
+            for (size_t i = 0; i < numUsedQuestions; ++i) {
+                saveFile.read(reinterpret_cast<char*>(&loadedUsedQuestions[i]), sizeof(int));
+                if (!saveFile.good()) { loadSuccess = false; break; }
+            }
+        }
+
+        // Enemy Data
+        size_t numEnemies;
+        saveFile.read(reinterpret_cast<char*>(&numEnemies), sizeof(numEnemies));
+        loadSuccess &= saveFile.good();
+        
+        // Validate enemy count to prevent excessive memory allocation
+        if (numEnemies > 100) { // Reasonable upper limit for enemies
+            std::cerr << "Too many enemies in save: " << numEnemies << std::endl;
+            loadSuccess = false;
+        }
+        
+        if (loadSuccess) {
+            loadedEnemyData.resize(numEnemies);
+            for (size_t i = 0; i < numEnemies; ++i) {
+                saveFile.read(reinterpret_cast<char*>(&loadedEnemyData[i].x), sizeof(float));
+                saveFile.read(reinterpret_cast<char*>(&loadedEnemyData[i].y), sizeof(float));
+                saveFile.read(reinterpret_cast<char*>(&loadedEnemyData[i].health), sizeof(int));
+                saveFile.read(reinterpret_cast<char*>(&loadedEnemyData[i].isBoss), sizeof(bool));
+                if (!saveFile.good()) { loadSuccess = false; break; }
+            }
+        }
+
+        // Object Data
+        size_t numObjects;
+        saveFile.read(reinterpret_cast<char*>(&numObjects), sizeof(numObjects));
+        loadSuccess &= saveFile.good();
+        
+        // Validate object count to prevent excessive memory allocation
+        if (numObjects > 100) { // Reasonable upper limit for objects
+            std::cerr << "Too many objects in save: " << numObjects << std::endl;
+            loadSuccess = false;
+        }
+        
+        if (loadSuccess && numObjects > 0) {
+            loadedObjectData.resize(numObjects);
+            for (size_t i = 0; i < numObjects; ++i) {
+                saveFile.read(reinterpret_cast<char*>(&loadedObjectData[i].x), sizeof(float));
+                saveFile.read(reinterpret_cast<char*>(&loadedObjectData[i].y), sizeof(float));
+                if (!readString(saveFile, loadedObjectData[i].type)) {
+                    loadSuccess = false; break;
+                }
+                if (!saveFile.good()) { loadSuccess = false; break; }
+            }
+        }
+
+        saveFile.close();
+
+        if (!loadSuccess) {
+            std::cerr << "Save file corrupted or incomplete. Starting new game." << std::endl;
+            startGame();
+            return;
+        }
+
+        // --- Reconstruct State ---
+        std::cout << "Load game successful. Reconstructing state..." << std::endl;
+
+        // Clear all existing entities first to avoid memory issues
+        manager.clear();
+        
+        // Delete map if it exists
+        if (map != nullptr) {
+            delete map;
+            map = nullptr;
+        }
+
+        // 1. Reset Core Game State Variables
+        gameOver = false;
+        playerWon = false;
+        questionActive = false;
+        pendingClueEntity = nullptr;
+        showFeedback = false;
+        showingExitInstructions = false;
+        damageTimer = 1.0f;
+        objectCollisionDelay = 1.0f;
+        objectCollisionsEnabled = false;
+
+        // 2. Clear Menu Entities and Pointers
+        menuTitle = nullptr; menuNewGameButton = nullptr; menuLoadGameButton = nullptr;
+        menuSettingsButton = nullptr; menuLeaderboardButton = nullptr; menuExitButton = nullptr;
+        endTitle = nullptr; endMessage = nullptr; endRestartButton = nullptr;
+        endReplayButton = nullptr; endMenuButton = nullptr;
+        pauseTitle = nullptr; pauseResumeButton = nullptr; pauseSaveButton = nullptr;
+        pauseRestartButton = nullptr; pauseSettingsButton = nullptr; pauseMainMenuButton = nullptr;
+        settingsTitle = nullptr; volumeSlider = nullptr; volumeLabel = nullptr;
+        keybindsLabel = nullptr; settingsBackButton = nullptr;
+
+        // Reset core entity pointers
+        player = nullptr; finalBoss = nullptr; healthbar = nullptr; ammobar = nullptr;
+        gameover = nullptr; clueCounter = nullptr; feedbackLabel = nullptr; scientist = nullptr;
+        questionLabel = nullptr; answer1Label = nullptr; answer2Label = nullptr;
+        answer3Label = nullptr; answer4Label = nullptr; questionBackground = nullptr;
+        timerLabel = nullptr; transitionLabel = nullptr;
+
+        // 4. Apply Loaded State Variables
+        currentLevel = loadedLevel;
+        collectedClues = loadedClues;
+        gameplayTime = loadedGameplayTime;
+        level4MapChanged = loadedLvl4MapChanged;
+        finalBossDefeated = loadedFinalBossDefeated;
+        scientistRescued = loadedScientistRescued;
+        canRescueScientist = loadedCanRescueScientist;
+
+        // Restore used questions set
+        usedQuestions.clear();
+        for (int index : loadedUsedQuestions) {
+            usedQuestions.insert(index);
+        }
+
+        // Set timer correctly
+        gameStartTime = SDL_GetTicks() - gameplayTime;
+
+        // Set level-specific total counts (important for UI)
+        if (currentLevel == 1) { totalClues = 3; totalMagazines = 3; totalHealthPotions = 2; }
+        else if (currentLevel == 2) { totalClues = 5; totalMagazines = 9; totalHealthPotions = 9; }
+        else if (currentLevel == 3) { totalClues = 7; totalMagazines = 15; totalHealthPotions = 15; }
+        else if (currentLevel == 4) { totalClues = 0; totalMagazines = 7; totalHealthPotions = 9; }
+        else {
+            // Fallback to level 1 if something went wrong
+            currentLevel = 1;
+            totalClues = 3; totalMagazines = 3; totalHealthPotions = 2;
+        }
+
+        // 5. Load Map (Handle level 4 state)
+        std::string terrainTexture = "terrainlvl" + std::to_string(currentLevel);
+        std::string mapPath;
+        if (currentLevel == 4 && level4MapChanged) {
+            mapPath = "./assets/lvl4/Level4MapAfter.map";
+        } else {
+            mapPath = "./assets/lvl" + std::to_string(currentLevel) + "/Level" + std::to_string(currentLevel) + "Map.map";
+        }
+
+        // Ensure texture is loaded
+        if (assets->GetTexture(terrainTexture) == nullptr) {
+            std::cerr << "Error: Failed to find texture " << terrainTexture << " for loaded level. Starting new game." << std::endl;
+            startGame();
+            return;
+        }
+
+        // Create map safely
+        try {
+            map = new Map(terrainTexture, 2, 32, manager);
+            map->LoadMap(mapPath, 60, 34); // Call directly
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Map loading error: " << e.what() << std::endl;
+            startGame();
+            return;
+        }
+
+        // 6. Create Transition Label first (needed for transition manager)
+        transitionLabel = &manager.addEntity();
+        transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
+
+        // Initialize transition manager (needed for level transitions)
+        transitionManager.init(this, &manager);
+        transitionManager.mTransitionLabel = transitionLabel;
+
+        // 7. Create all UI entities
+        try {
+            healthbar = &manager.addEntity();
+            ammobar = &manager.addEntity();
+            gameover = &manager.addEntity();
+            clueCounter = &manager.addEntity();
+            feedbackLabel = &manager.addEntity();
+            timerLabel = &manager.addEntity();
+            questionLabel = &manager.addEntity();
+            answer1Label = &manager.addEntity();
+            answer2Label = &manager.addEntity();
+            answer3Label = &manager.addEntity();
+            answer4Label = &manager.addEntity();
+            questionBackground = &manager.addEntity();
+
+            healthbar->addComponent<UILabel>(20, 20, "Health: " + std::to_string(playerHealth), "font1", white);
+            ammobar->addComponent<UILabel>(20, 60, "Ammo: " + std::to_string(playerCurrentAmmo), "font1", white);
+            clueCounter->addComponent<UILabel>(20, 100, "Clues: " + std::to_string(collectedClues) + "/" + std::to_string(totalClues), "font1", white);
+            gameover->addComponent<UILabel>(0, 0, "", "font2", white);
+            feedbackLabel->addComponent<UILabel>(0, 650, "", "font2", white);
+
+            // Initialize timer label
+            Uint32 totalSeconds = gameplayTime / 1000;
+            Uint32 minutes = totalSeconds / 60;
+            Uint32 seconds = totalSeconds % 60;
+            std::stringstream timeSS;
+            timeSS << "Time: " << std::setfill('0') << std::setw(2) << minutes
+                << ":" << std::setfill('0') << std::setw(2) << seconds;
+            timerLabel->addComponent<UILabel>(0, 20, timeSS.str(), "font1", white);
+            int timerWidth = timerLabel->getComponent<UILabel>().GetWidth();
+            int xPosTimer = (1920 - timerWidth) / 2;
+            timerLabel->getComponent<UILabel>().SetPosition(xPosTimer, 20);
+
+            // Initialize question labels (empty initially)
+            questionLabel->addComponent<UILabel>(0, 300, "", "font1", white);
+            answer1Label->addComponent<UILabel>(0, 340, "", "font1", white);
+            answer2Label->addComponent<UILabel>(0, 380, "", "font1", white);
+            answer3Label->addComponent<UILabel>(0, 420, "", "font1", white);
+            answer4Label->addComponent<UILabel>(0, 460, "", "font1", white);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "UI initialization error: " << e.what() << std::endl;
+            startGame();
+            return;
+        }
+
+        // 8. Create player
+        try {
+            player = &manager.addEntity();
+            player->addComponent<TransformComponent>(playerX, playerY, 32, 32, 3);
+            player->addComponent<SpriteComponent>("player", true);
+            player->addComponent<ColliderComponent>("player", 21 * 3, 29 * 3, 6 * 3, 4 * 3);
+            player->addComponent<HealthComponent>(playerHealth);
+            player->addComponent<AmmoComponent>(playerCurrentAmmo, playerMaxAmmo);
+            player->addComponent<KeyboardController>();
+            player->addGroup(Game::groupPlayers);
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Player creation error: " << e.what() << std::endl;
+            startGame();
+            return;
+        }
+
+        // 9. Create enemies
+        try {
+            for (const auto& data : loadedEnemyData) {
+                Entity& enemy = manager.addEntity();
+                enemy.addComponent<TransformComponent>(data.x, data.y, 32, 32, 3);
+                enemy.addComponent<ColliderComponent>("enemy");
+                enemy.addComponent<HealthComponent>(data.health);
+                enemy.addComponent<EnemyAIComponent>(manager);
+                enemy.addGroup(Game::groupEnemies);
+
+                if (data.isBoss) {
+                    enemy.addComponent<SpriteComponent>("boss", true);
+                    enemy.getComponent<ColliderComponent>().tag = "boss";
+                    enemy.getComponent<TransformComponent>().scale = 4;
+                    enemy.getComponent<EnemyAIComponent>().setSpeed(0.5f);
+                    finalBoss = &enemy;
+                } else {
+                    enemy.addComponent<SpriteComponent>("enemy", true);
+                }
+            }
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Enemy creation error: " << e.what() << std::endl;
+            startGame();
+            return;
+        }
+
+        // 10. Create objects
+        try {
+            for (const auto& data : loadedObjectData) {
+                if (data.type == "scientist") {
+                    scientist = &manager.addEntity();
+                    scientist->addComponent<TransformComponent>(data.x, data.y, 32, 32, 3);
+                    scientist->addComponent<SpriteComponent>("scientist", true);
+                    scientist->addComponent<ColliderComponent>("scientist");
+                    scientist->getComponent<SpriteComponent>().Play(scientistRescued ? "Idle" : "Locked");
+                    scientist->addGroup(Game::groupObjects);
+                } else {
+                    // Handle clues, magazines, potions, cactus etc.
+                    assets->CreateObject(data.x, data.y, data.type);
+                }
+            }
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Object creation error: " << e.what() << std::endl;
+            startGame();
+            return;
+        }
+
+        // 11. Get group references after recreating entities
+        tiles = &manager.getGroup(Game::groupMap);
+        players = &manager.getGroup(Game::groupPlayers);
+        enemies = &manager.getGroup(Game::groupEnemies);
+        colliders = &manager.getGroup(Game::groupColliders);
+        projectiles = &manager.getGroup(Game::groupProjectiles);
+        objects = &manager.getGroup(Game::groupObjects);
+        ui = &manager.getGroup(Game::groupUI);
+
+        // Reset position recording state
+        isRecordingPositions = true;
+        lastRecordedPosition = player->getComponent<TransformComponent>().position;
+
+        // Set Game State
+        gameState = STATE_GAME;
+
+        std::cout << "Game loaded successfully!" << std::endl;
+    } 
+    catch (const std::exception& e) {
+        std::cerr << "Exception during game load: " << e.what() << std::endl;
+        startGame();
+    } 
+    catch (...) {
+        std::cerr << "Unknown exception during game load. Starting new game." << std::endl;
+        startGame();
+    }
 }
 
 void Game::initEndScreen(bool victory) {
@@ -2409,42 +2868,28 @@ void Game::renderEndScreen() {
 
 void Game::togglePause() {
     if (gameState == STATE_GAME) {
-        // Pause the game
-        gameState = STATE_PAUSE;
+        // Store the current gameplay time when pausing
+        gameplayTime = SDL_GetTicks() - gameStartTime;
         
-        // Initialize the pause menu
+        // Change to pause state
+        gameState = STATE_PAUSE;
         initPauseMenu();
-    } else if (gameState == STATE_PAUSE) {
-        // Resume the game
+    } 
+    else if (gameState == STATE_PAUSE) {
+        // Reset the game start time based on the stored gameplay time
+        gameStartTime = SDL_GetTicks() - gameplayTime;
+        
+        // Return to game state
         gameState = STATE_GAME;
         
         // Clean up pause menu entities
-        if (pauseTitle) pauseTitle->destroy();
-        if (pauseResumeButton) pauseResumeButton->destroy();
-        if (pauseSaveButton) pauseSaveButton->destroy();
-        if (pauseRestartButton) pauseRestartButton->destroy();
-        if (pauseSettingsButton) pauseSettingsButton->destroy();
-        if (pauseMainMenuButton) pauseMainMenuButton->destroy();
-        
-        // Reset pointers
         pauseTitle = nullptr;
         pauseResumeButton = nullptr;
         pauseSaveButton = nullptr;
         pauseRestartButton = nullptr;
         pauseSettingsButton = nullptr;
         pauseMainMenuButton = nullptr;
-        
-        // Reset state
-        selectedPauseItem = PAUSE_RESUME;
-        pauseHighlightActive = false;
-        pauseItemSelected = false;
-        
-        // Force the player's KeyboardController to require a mouse release before shooting
-        if (player != nullptr && player->hasComponent<KeyboardController>()) {
-            KeyboardController& controller = player->getComponent<KeyboardController>();
-            controller.requireMouseRelease = true;
-            controller.gameStartTime = SDL_GetTicks(); // Reset the cooldown timer
-        }
+        pauseBackground = nullptr;
     }
 }
 
@@ -2617,24 +3062,139 @@ void Game::renderPauseMenu() {
 }
 
 void Game::saveGame() {
-    // This is a stub function for now
-    // In a real implementation, this would save the game state to a file
-    
-    std::cout << "Save game feature not implemented yet." << std::endl;
-    
-    // Show a temporary notification that game was saved
-    // Create a notification at the bottom of the screen
-    Entity* notification = &manager.addEntity();
-    notification->addComponent<UILabel>(0, 600, "Game saved!", "font1", green);
-    
-    // Center the notification
-    int notifyWidth = notification->getComponent<UILabel>().GetWidth();
-    int notifyX = (1920 - notifyWidth) / 2;
-    notification->getComponent<UILabel>().SetPosition(notifyX, 600);
-    
-    // Set a timer to destroy the notification after 2 seconds
-    // In a real implementation, we'd use a proper timer system
-    // For this demo, we'll just leave it there
+    // Prevent saving if the player doesn't exist (e.g., game over screen)
+    if (!player || !player->isActive()) {
+        std::cout << "Cannot save game: Player does not exist." << std::endl;
+        // Optionally show a UI message indicating save is not possible
+        return;
+    }
+
+    std::ofstream saveFile("assets/savegame.bin", std::ios::binary | std::ios::trunc);
+    if (!saveFile.is_open()) {
+        std::cerr << "Error: Could not open savegame.bin for writing!" << std::endl;
+        // Optionally show a UI message about the failure
+        return;
+    }
+
+    // --- Gather Data ---
+    // Player Data
+    TransformComponent& playerTransform = player->getComponent<TransformComponent>();
+    HealthComponent& playerHealth = player->getComponent<HealthComponent>();
+    AmmoComponent& playerAmmo = player->getComponent<AmmoComponent>();
+    float pX = playerTransform.position.x;
+    float pY = playerTransform.position.y;
+    int pHealth = playerHealth.health;
+    int pCurrentAmmo = playerAmmo.currentAmmo;
+    int pMaxAmmo = playerAmmo.maxAmmo;
+
+    // Game State
+    // collectedClues, currentLevel, gameplayTime, level4 flags are already member variables
+
+    // Used Questions (convert set to vector for easier saving)
+    std::vector<int> questionsToSave(usedQuestions.begin(), usedQuestions.end());
+
+    // Enemy Data
+    std::vector<EnemySaveData> enemiesToSave;
+    manager.refresh(); // Ensure groups are up-to-date
+    enemies = &manager.getGroup(Game::groupEnemies); // Refresh pointer just in case
+    for (const auto& enemy : *enemies) {
+        if (enemy->isActive()) {
+            TransformComponent& et = enemy->getComponent<TransformComponent>();
+            HealthComponent& eh = enemy->getComponent<HealthComponent>();
+            bool isBoss = (enemy == finalBoss); // Check if it's the final boss
+            enemiesToSave.push_back({et.position.x, et.position.y, eh.health, isBoss});
+        }
+    }
+
+    // Object Data (Clues, Items, Scientist)
+    std::vector<ObjectSaveData> objectsToSave;
+    objects = &manager.getGroup(Game::groupObjects); // Refresh pointer
+    for (const auto& object : *objects) {
+        if (object->isActive() && object->hasComponent<ColliderComponent>()) {
+            TransformComponent& ot = object->getComponent<TransformComponent>();
+            std::string type = object->getComponent<ColliderComponent>().tag; // Use tag as type
+
+             // Ensure type is correct for scientist
+             if (object == scientist) {
+                 type = "scientist";
+             }
+
+            // Only save relevant object types
+            if (type == "clue" || type == "magazine" || type == "healthpotion" || type == "scientist" || type == "cactus") {
+                 objectsToSave.push_back({ot.position.x, ot.position.y, type});
+            }
+        }
+    }
+
+     // Removed getting scientist state string
+
+
+    // --- Write Data ---
+    // Player
+    saveFile.write(reinterpret_cast<const char*>(&pX), sizeof(pX));
+    saveFile.write(reinterpret_cast<const char*>(&pY), sizeof(pY));
+    saveFile.write(reinterpret_cast<const char*>(&pHealth), sizeof(pHealth));
+    saveFile.write(reinterpret_cast<const char*>(&pCurrentAmmo), sizeof(pCurrentAmmo));
+    saveFile.write(reinterpret_cast<const char*>(&pMaxAmmo), sizeof(pMaxAmmo));
+
+    // Game State
+    saveFile.write(reinterpret_cast<const char*>(&collectedClues), sizeof(collectedClues));
+    saveFile.write(reinterpret_cast<const char*>(&currentLevel), sizeof(currentLevel));
+    saveFile.write(reinterpret_cast<const char*>(&gameplayTime), sizeof(gameplayTime));
+    saveFile.write(reinterpret_cast<const char*>(&level4MapChanged), sizeof(level4MapChanged));
+    saveFile.write(reinterpret_cast<const char*>(&finalBossDefeated), sizeof(finalBossDefeated));
+    saveFile.write(reinterpret_cast<const char*>(&scientistRescued), sizeof(scientistRescued));
+    saveFile.write(reinterpret_cast<const char*>(&canRescueScientist), sizeof(canRescueScientist));
+
+    // Used Questions
+    size_t numUsedQuestions = questionsToSave.size();
+    saveFile.write(reinterpret_cast<const char*>(&numUsedQuestions), sizeof(numUsedQuestions));
+    for (int questionIndex : questionsToSave) {
+        saveFile.write(reinterpret_cast<const char*>(&questionIndex), sizeof(questionIndex));
+    }
+
+    // Enemy Data
+    size_t numEnemies = enemiesToSave.size();
+    saveFile.write(reinterpret_cast<const char*>(&numEnemies), sizeof(numEnemies));
+    for (const auto& data : enemiesToSave) {
+        saveFile.write(reinterpret_cast<const char*>(&data.x), sizeof(float));
+        saveFile.write(reinterpret_cast<const char*>(&data.y), sizeof(float));
+        saveFile.write(reinterpret_cast<const char*>(&data.health), sizeof(int));
+        saveFile.write(reinterpret_cast<const char*>(&data.isBoss), sizeof(bool));
+    }
+
+    // Object Data
+    size_t numObjects = objectsToSave.size();
+    saveFile.write(reinterpret_cast<const char*>(&numObjects), sizeof(numObjects));
+    for (const auto& data : objectsToSave) {
+        saveFile.write(reinterpret_cast<const char*>(&data.x), sizeof(float));
+        saveFile.write(reinterpret_cast<const char*>(&data.y), sizeof(float));
+        writeString(saveFile, data.type);
+    }
+
+     // Removed writing scientist state string
+
+    saveFile.close();
+
+    std::cout << "Game saved successfully." << std::endl;
+
+    // Show notification (simplified - using existing feedback label if available)
+    if (feedbackLabel && feedbackLabel->hasComponent<UILabel>()) {
+        feedbackLabel->getComponent<UILabel>().SetLabelText("Game Saved!", "font1", green);
+        int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+        int xPos = (1920 - feedbackWidth) / 2;
+        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Position at bottom
+        showFeedback = true; // Make it visible
+        feedbackStartTime = SDL_GetTicks(); // Start timer to hide it
+        showingExitInstructions = true; // Use this flag to prevent immediate closing by game logic
+                                         // Note: This might interfere slightly if player saves *just* as exit instructions appear.
+                                         // A dedicated notification system would be better.
+        // We need a way to clear this specific notification after a delay, separate from other feedback.
+        // For now, it will disappear when other feedback would.
+    } else {
+        // Fallback if feedbackLabel isn't ready (e.g., called too early)
+         std::cout << "Feedback label not available for save notification." << std::endl;
+    }
 }
 
 void Game::initSettingsMenu() {

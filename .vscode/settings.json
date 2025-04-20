@@ -56,7 +56,9 @@
         "text_encoding": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "set": "cpp",
+        "iomanip": "cpp"
     },
     "cSpell.words": [
         "AABB",
