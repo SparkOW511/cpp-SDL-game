@@ -143,6 +143,8 @@ class Game {
         static bool canRescueScientist;      // Tracks if player can interact with scientist
         static bool needsRestart;            // Flag to indicate game needs restart
         static bool returnToMainMenu;        // Flag to indicate return to main menu
+        static bool hasSavedDuringExitInstructions; // Flag to track if game was saved during exit instructions
+        static std::string savedExitInstructionsText; // Store original exit instructions text
 
         // Replay related variables
         static bool isRecordingPositions;    // Flag to record player positions

@@ -131,6 +131,10 @@ bool settingsHighlightActive = false;
 bool settingsItemSelected = false;
 bool draggingVolumeSlider = false;
 
+// Add new variables after static declarations at the top of the file
+bool Game::hasSavedDuringExitInstructions = false; // Add this new variable
+std::string Game::savedExitInstructionsText = ""; // Add this to store original exit instructions
+
 // Helper to write a string to a binary file
 void writeString(std::ofstream& file, const std::string& str) {
     size_t len = str.length();
@@ -1690,9 +1694,24 @@ void Game::update()
                 float playerX = player->getComponent<TransformComponent>().position.x / 64;
                 float playerY = player->getComponent<TransformComponent>().position.y / 64;
                 
-                // Check if player is at the pyramid entrance
-                if ((playerX >= 24 && playerX <= 26) && (playerY >= 19 && playerY <= 20)) {
-                    // Player has reached the pyramid, proceed to next level or win
+                // Check if player is at the pyramid entrance - use a more generous collision box
+                
+                // Also check for collision between player and a broader pyramid entrance area
+                SDL_Rect playerCollider = player->getComponent<ColliderComponent>().collider;
+                SDL_Rect pyramidEntrance = {
+                    24 * 64, // x
+                    19 * 64, // y
+                    3 * 64,  // width (3 tiles wide)
+                    1 * 64   // height (1 tile tall) - shorter from the bottom
+                };
+                
+                // Adjust for camera position since player collider is in screen space
+                pyramidEntrance.x -= camera.x;
+                pyramidEntrance.y -= camera.y;
+                
+                if (Collision::AABB(playerCollider, pyramidEntrance) || 
+                    ((playerX >= 23 && playerX <= 27) && (playerY >= 18 && playerY <= 20))) {
+                    // Player has reached the pyramid, proceed to next level
                     advanceToNextLevel();
                 }
             } else {
@@ -1711,11 +1730,34 @@ void Game::update()
 
     // Handle feedback message timeout (moved outside game state switch for consistency)
     if (showFeedback && feedbackLabel && feedbackLabel->hasComponent<UILabel>()) {
-        // For regular feedback from questions
-        if (currentTime - feedbackStartTime >= feedbackDuration) {
-            showFeedback = false;
-            feedbackLabel->getComponent<UILabel>().SetLabelText("", "font1", white);
+        // Check if we're showing level completion instructions
+        bool isExitInstructions = 
+            showingExitInstructions && 
+            ((currentLevel != 4 && collectedClues >= totalClues) || 
+            (currentLevel == 4 && finalBossDefeated));
+            
+        // Check if we need to restore exit instructions after temporary save notification
+        if (hasSavedDuringExitInstructions && currentTime - feedbackStartTime >= feedbackDuration) {
+            // Restore the original exit instructions text
+            feedbackLabel->getComponent<UILabel>().SetLabelText(savedExitInstructionsText, "font1", {255, 215, 0, 255});
+            int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+            int xPos = (1920 - feedbackWidth) / 2;
+            feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
+            
+            // Reset the saved during exit flag, but keep showFeedback and showingExitInstructions true
+            hasSavedDuringExitInstructions = false;
+            
+            // Reset feedbackStartTime to avoid immediate hiding after restoration
+            feedbackStartTime = currentTime;
         }
+        // Only hide feedback if it's not exit instructions and not during restoration
+        else if (!isExitInstructions && !hasSavedDuringExitInstructions) {
+            if (currentTime - feedbackStartTime >= feedbackDuration) {
+                showFeedback = false;
+                feedbackLabel->getComponent<UILabel>().SetLabelText("", "font1", white);
+            }
+        }
+        // Exit instructions will remain visible until player advances to next level
     }
 }
 
@@ -1815,8 +1857,16 @@ void Game::render() {
     
     // Draw feedback if active (for both question feedback and exit instructions)
     if (showFeedback && feedbackLabel != nullptr) {
-        // Create special background for feedback only for regular feedback, not exit instructions
-        if (!showingExitInstructions) {
+        // Check if it's a save game notification
+        bool isSaveNotification = 
+            feedbackLabel->hasComponent<UILabel>() && 
+            feedbackLabel->getComponent<UILabel>().GetWidth() > 0 &&
+            feedbackLabel->getComponent<UILabel>().GetPosition().y == 950 && // Position check (bottom of screen)
+            !showingExitInstructions; // Not exit instructions
+            
+        // Create special background for feedback only for regular feedback (questions), 
+        // not exit instructions or save notification
+        if (!showingExitInstructions && !isSaveNotification) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
             SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
@@ -3180,17 +3230,31 @@ void Game::saveGame() {
 
     // Show notification (simplified - using existing feedback label if available)
     if (feedbackLabel && feedbackLabel->hasComponent<UILabel>()) {
+        // Check if we're showing exit instructions and need to temporarily override
+        bool isExitInstructions = 
+            showingExitInstructions && 
+            ((currentLevel != 4 && collectedClues >= totalClues) || 
+            (currentLevel == 4 && finalBossDefeated));
+            
+        if (isExitInstructions) {
+            // Store the current exit instructions text
+            if (currentLevel == 3) {
+                savedExitInstructionsText = "All clues collected! Enter the pyramid to see what lies ahead.";
+            } else if (currentLevel == 4 && level4MapChanged) {
+                savedExitInstructionsText = "BOSS DEFEATED! The path is revealed! Find and rescue the SUPERUM!";
+            } else {
+                savedExitInstructionsText = "All clues collected! Head NORTH to exit the level.";
+            }
+            hasSavedDuringExitInstructions = true;
+        }
+    
+        // Display save notification regardless of current state
         feedbackLabel->getComponent<UILabel>().SetLabelText("Game Saved!", "font1", green);
         int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
         int xPos = (1920 - feedbackWidth) / 2;
         feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Position at bottom
         showFeedback = true; // Make it visible
         feedbackStartTime = SDL_GetTicks(); // Start timer to hide it
-        showingExitInstructions = true; // Use this flag to prevent immediate closing by game logic
-                                         // Note: This might interfere slightly if player saves *just* as exit instructions appear.
-                                         // A dedicated notification system would be better.
-        // We need a way to clear this specific notification after a delay, separate from other feedback.
-        // For now, it will disappear when other feedback would.
     } else {
         // Fallback if feedbackLabel isn't ready (e.g., called too early)
          std::cout << "Feedback label not available for save notification." << std::endl;
