@@ -226,7 +226,40 @@ Game::Game()
         {"What is the perimeter of a square with sides of length 6?", {"12", "18", "24", "36"}, 2},
         {"What is the next number in the sequence: 2, 4, 8, 16, ...?", {"24", "30", "32", "42"}, 2},
         {"What is the area of a circle with radius 5?", {"25pi", "10pi", "15pi", "20pi"}, 0},
-        {"What does the ^ operator typically represent in programming?", {"Multiplication", "Division", "Exponentiation", "Bitwise XOR"}, 3}
+        {"What does the ^ operator typically represent in programming?", {"Multiplication", "Division", "Exponentiation", "Bitwise XOR"}, 3},
+        
+        {"Which planet is known as the Red Planet?", {"Venus", "Mars", "Jupiter", "Saturn"}, 1},
+        {"What is the chemical symbol for gold?", {"Go", "Gl", "Au", "Ag"}, 2},
+        {"What is the hardest natural substance on Earth?", {"Diamond", "Titanium", "Platinum", "Steel"}, 0},
+        {"Which of these is NOT a state of matter?", {"Solid", "Liquid", "Gas", "Energy"}, 3},
+        {"What is the largest organ in the human body?", {"Heart", "Brain", "Liver", "Skin"}, 3},
+        {"Which of these animals is NOT a mammal?", {"Bat", "Whale", "Penguin", "Elephant"}, 2},
+        {"What is the smallest unit of life?", {"Atom", "Cell", "Molecule", "Tissue"}, 1},
+        {"What is the process by which plants make their own food?", {"Respiration", "Photosynthesis", "Digestion", "Fermentation"}, 1},
+        {"What is the speed of light approximately?", {"300,000 km/s", "150,000 km/s", "500,000 km/s", "1,000,000 km/s"}, 0},
+        {"Which of these is NOT one of Newton's Laws of Motion?", {"Law of Inertia", "Law of Acceleration", "Law of Conservation of Energy", "Law of Action and Reaction"}, 2},
+        
+        {"In which year did World War II end?", {"1943", "1945", "1947", "1950"}, 1},
+        {"Who painted the Mona Lisa?", {"Vincent van Gogh", "Pablo Picasso", "Leonardo da Vinci", "Michelangelo"}, 2},
+        {"Which ancient civilization built the pyramids of Giza?", {"Greeks", "Romans", "Egyptians", "Mayans"}, 2},
+        {"Who was the first person to step on the moon?", {"Buzz Aldrin", "Yuri Gagarin", "Neil Armstrong", "John Glenn"}, 2},
+        {"Which country was NOT part of the Allied Powers in World War II?", {"United States", "Soviet Union", "Italy", "United Kingdom"}, 2},
+        {"In which century did the Renaissance begin?", {"13th century", "14th century", "15th century", "16th century"}, 1},
+        {"Who wrote 'Romeo and Juliet'?", {"Charles Dickens", "Jane Austen", "William Shakespeare", "Mark Twain"}, 2},
+        {"Which ancient empire was ruled by Julius Caesar?", {"Greek", "Persian", "Roman", "Ottoman"}, 2},
+        {"Which invention allowed books to be mass-produced for the first time?", {"Typewriter", "Printing Press", "Mechanical Loom", "Telegraph"}, 1},
+        {"Which civilization built Machu Picchu?", {"Aztec", "Maya", "Olmec", "Inca"}, 3},
+        
+        {"Which game series features a character named Kratos?", {"Halo", "God of War", "Call of Duty", "Assassin's Creed"}, 1},
+        {"What was the best-selling video game console of all time?", {"PlayStation 2", "Nintendo Switch", "Xbox 360", "Game Boy/Game Boy Color"}, 0},
+        {"Which game popularized the Battle Royale genre?", {"Fortnite", "PUBG", "Apex Legends", "Call of Duty: Warzone"}, 1},
+        {"What year was the first Super Mario Bros. game released?", {"1983", "1985", "1987", "1989"}, 1},
+        {"Which popular game uses the Unreal Engine?", {"Minecraft", "Fortnite", "World of Warcraft", "Among Us"}, 1},
+        {"What is the name of the main character in The Legend of Zelda series?", {"Zelda", "Link", "Ganon", "Navi"}, 1},
+        {"Which gaming company produces the FIFA series?", {"Ubisoft", "EA", "Activision Blizzard", "2K Sports"}, 1},
+        {"In 'Among Us', what are the crewmates trying to do?", {"Escape", "Complete tasks", "Find the impostor", "Survive the longest"}, 1},
+        {"Which of these is NOT a playable character class in most MMORPGs?", {"Warrior", "Mage", "Pilot", "Healer"}, 2},
+        {"What game featured the first widely recognized Easter Egg?", {"Pac-Man", "Adventure", "Super Mario Bros.", "Donkey Kong"}, 1}
     };
 }
 
