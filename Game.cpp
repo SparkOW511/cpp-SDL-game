@@ -248,18 +248,7 @@ Game::Game()
         {"Who wrote 'Romeo and Juliet'?", {"Charles Dickens", "Jane Austen", "William Shakespeare", "Mark Twain"}, 2},
         {"Which ancient empire was ruled by Julius Caesar?", {"Greek", "Persian", "Roman", "Ottoman"}, 2},
         {"Which invention allowed books to be mass-produced for the first time?", {"Typewriter", "Printing Press", "Mechanical Loom", "Telegraph"}, 1},
-        {"Which civilization built Machu Picchu?", {"Aztec", "Maya", "Olmec", "Inca"}, 3},
-        
-        {"Which game series features a character named Kratos?", {"Halo", "God of War", "Call of Duty", "Assassin's Creed"}, 1},
-        {"What was the best-selling video game console of all time?", {"PlayStation 2", "Nintendo Switch", "Xbox 360", "Game Boy/Game Boy Color"}, 0},
-        {"Which game popularized the Battle Royale genre?", {"Fortnite", "PUBG", "Apex Legends", "Call of Duty: Warzone"}, 1},
-        {"What year was the first Super Mario Bros. game released?", {"1983", "1985", "1987", "1989"}, 1},
-        {"Which popular game uses the Unreal Engine?", {"Minecraft", "Fortnite", "World of Warcraft", "Among Us"}, 1},
-        {"What is the name of the main character in The Legend of Zelda series?", {"Zelda", "Link", "Ganon", "Navi"}, 1},
-        {"Which gaming company produces the FIFA series?", {"Ubisoft", "EA", "Activision Blizzard", "2K Sports"}, 1},
-        {"In 'Among Us', what are the crewmates trying to do?", {"Escape", "Complete tasks", "Find the impostor", "Survive the longest"}, 1},
-        {"Which of these is NOT a playable character class in most MMORPGs?", {"Warrior", "Mage", "Pilot", "Healer"}, 2},
-        {"What game featured the first widely recognized Easter Egg?", {"Pac-Man", "Adventure", "Super Mario Bros.", "Donkey Kong"}, 1}
+        {"Which civilization built Machu Picchu?", {"Aztec", "Maya", "Olmec", "Inca"}, 3}
     };
 }
 
