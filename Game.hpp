@@ -11,18 +11,16 @@
 #include "Vector2D.hpp"
 #include "RandomPositionManager.hpp"
 #include "TransitionManager.hpp"
-#include <map> // Add this include for std::map
+#include <map>
 
 class ColliderComponent;
 class AssetManager;
 class Map;
 
-// Extern declarations for global entities
 extern Entity* player;
-extern Entity* finalBoss; // Final boss entity for level 4
-extern Entity* scientist; // Scientist NPC for level 4
+extern Entity* finalBoss;
+extern Entity* scientist;
 
-// Game state enumeration 
 enum GameState {
     STATE_MAIN_MENU,
     STATE_GAME,
@@ -30,21 +28,19 @@ enum GameState {
     STATE_SETTINGS,
     STATE_GAME_OVER,
     STATE_END_SCREEN,
-    STATE_REPLAY, // Added replay state
-    STATE_LEADERBOARD // Added leaderboard state
+    STATE_REPLAY,
+    STATE_LEADERBOARD
 };
 
-// Menu item enumeration
 enum MenuItem {
     MENU_NEW_GAME,
     MENU_LOAD_GAME,
-    MENU_SETTINGS,     // Add settings option
-    MENU_LEADERBOARD,  // Add leaderboard option
+    MENU_SETTINGS,
+    MENU_LEADERBOARD,
     MENU_EXIT,
     MENU_ITEMS_COUNT
 };
 
-// Pause menu items
 enum PauseMenuItem {
     PAUSE_RESUME,
     PAUSE_SAVE,
@@ -54,17 +50,15 @@ enum PauseMenuItem {
     PAUSE_ITEMS_COUNT
 };
 
-// Settings menu items
 enum SettingsMenuItem {
     SETTINGS_VOLUME,
     SETTINGS_BACK,
     SETTINGS_ITEMS_COUNT
 };
 
-// End screen options
 enum EndScreenOption {
     END_RESTART,
-    END_REPLAY,  // Add replay option
+    END_REPLAY,
     END_MAIN_MENU,
     END_OPTIONS_COUNT
 };
@@ -81,7 +75,7 @@ class Game {
         void render();
         void clean();
         void restart();
-        void replay(); // New function for replaying the current level
+        void replay();
         void initEntities();
         bool running() { return isRunning; }
         
@@ -89,36 +83,30 @@ class Game {
         void checkAnswer(int selectedAnswer);
         void closeQuestion();
 
-        // Main menu methods
         void initMainMenu();
         void updateMainMenu();
         void renderMainMenu();
         void startGame();
-        void loadGame(); // Not implemented functionality
+        void loadGame();
 
-        // Level management methods
         void loadLevel(int levelNum);
         void advanceToNextLevel();
         
-        // End screen methods
         void initEndScreen(bool victory);
         void updateEndScreen();
         void renderEndScreen();
 
-        // Pause menu methods
         void initPauseMenu();
         void updatePauseMenu();
         void renderPauseMenu();
         void togglePause();
-        void saveGame(); // Stub for now
+        void saveGame();
         
-        // Settings menu methods
         void initSettingsMenu();
         void updateSettingsMenu();
         void renderSettingsMenu();
         void applySettings();
 
-        // Leaderboard methods
         void initLeaderboard();
         void renderLeaderboard();
         void updateLeaderboard();
@@ -130,9 +118,9 @@ class Game {
         static bool isRunning;
         static SDL_Rect camera;
         static AssetManager* assets;
-        static int totalClues;         // Now set per level in loadLevel method
-        static int totalMagazines;     // Now set per level in loadLevel method
-        static int totalHealthPotions; // Now set per level in loadLevel method
+        static int totalClues;
+        static int totalMagazines;
+        static int totalHealthPotions;
         static int collectedClues;
         static bool gameOver;
         static bool playerWon;
@@ -143,33 +131,30 @@ class Game {
         static Entity* feedbackLabel;
         static int currentLevel;
         static int maxLevels;
-        static bool showingExitInstructions; // Tracks if exit instructions have been shown
-        static GameState gameState;          // Current game state
-        static bool level4MapChanged;        // Tracks if Level 4 map has been changed
-        static bool finalBossDefeated;       // Tracks if the final boss has been defeated
-        static bool bossMusicPlaying;        // Tracks if the boss music is already playing
-        static bool scientistRescued;        // Tracks if the scientist has been rescued
-        static bool canRescueScientist;      // Tracks if player can interact with scientist
-        static bool returnToMainMenu;        // Flag to indicate return to main menu
-        static bool hasSavedDuringExitInstructions; // Flag to track if game was saved during exit instructions
-        static std::string savedExitInstructionsText; // Store original exit instructions text
+        static bool showingExitInstructions;
+        static GameState gameState;
+        static bool level4MapChanged;
+        static bool finalBossDefeated;
+        static bool bossMusicPlaying;
+        static bool scientistRescued;
+        static bool canRescueScientist;
+        static bool returnToMainMenu;
+        static bool hasSavedDuringExitInstructions;
+        static std::string savedExitInstructionsText;
 
-        // Replay related variables
-        static bool isRecordingPositions;    // Flag to record player positions
-        static bool isReplaying;             // Flag that indicates we're in replay mode
-        static int replayPositionIndex;      // Index within the current level's positions
-        static Vector2D lastRecordedPosition; // Last position that was recorded
-        static Uint32 replayFrameTime;       // Time to wait between replay frames
-        static Uint32 lastReplayFrameTime;   // Last frame time for replay timing
+        static bool isRecordingPositions;
+        static bool isReplaying;
+        static int replayPositionIndex;
+        static Vector2D lastRecordedPosition;
+        static Uint32 replayFrameTime;
+        static Uint32 lastReplayFrameTime;
 
-        // Timer related methods and variables
         static Uint32 gameStartTime;
         static Uint32 gameplayTime;
         static Entity* timerLabel;
 
-        // Track which questions have been used
         std::set<int> usedQuestions;
-        int currentQuestion = -1; // Track the currently selected question
+        int currentQuestion = -1;
 
         enum groupLabels : std::size_t {
             groupMap,
@@ -182,61 +167,51 @@ class Game {
             groupNPCs
         };
 
-        // Volume settings (0-100)
         static int volumeLevel;
         
-        // Current music track
         static std::string currentMusic;
 
-        // Replay related entities
-        Entity* replayEntity = nullptr;       // Entity used for replay visualization
-        // Use a map to store positions per level
+        Entity* replayEntity = nullptr;
         std::map<int, std::vector<Vector2D>> allReplayPositionsByLevel;
-        int currentReplayLevel = 1; // Track the level currently being replayed
+        int currentReplayLevel = 1;
 
     private:
         int count = 0;
         Uint32 lastTime = 0;
         SDL_Window* window;
         SDL_Color white = {255, 255, 255, 255};
-        SDL_Color green = {0, 255, 0, 255};   // Color for correct answers
-        SDL_Color red = {255, 0, 0, 255};     // Color for incorrect answers
-        SDL_Color yellow = {255, 255, 0, 255}; // Color for selected menu items
+        SDL_Color green = {0, 255, 0, 255};
+        SDL_Color red = {255, 0, 0, 255};
+        SDL_Color yellow = {255, 255, 0, 255};
         
-        bool isAnswerCorrect = false;         // Was the last answer correct
-        const Uint32 feedbackDuration = 800; // How long to show feedback (0.8 seconds)
+        bool isAnswerCorrect = false;
+        const Uint32 feedbackDuration = 800;
         
-        // Sound cooldown variables
-        float hurtSoundTimer = 0.0f;          // Timer for hurt sound cooldown
-        const float hurtSoundCooldown = 0.5f; // Cooldown for hurt sound (0.5 seconds)
+        float hurtSoundTimer = 0.0f;
+        const float hurtSoundCooldown = 0.5f;
         
-        // Main menu entities
         Entity* menuTitle = nullptr;
         Entity* menuNewGameButton = nullptr;
         Entity* menuLoadGameButton = nullptr;
-        Entity* menuSettingsButton = nullptr;  // Add settings button entity
-        Entity* menuLeaderboardButton = nullptr;  // Add leaderboard button entity
+        Entity* menuSettingsButton = nullptr;
+        Entity* menuLeaderboardButton = nullptr;
         Entity* menuExitButton = nullptr;
         Entity* menuBackground = nullptr;
         
-        // Menu state tracking
-        int selectedMenuItem = MENU_NEW_GAME; // Default to New Game
+        int selectedMenuItem = MENU_NEW_GAME;
         bool menuItemSelected = false;
-        bool menuHighlightActive = false;     // Flag to track if menu highlights should be active
+        bool menuHighlightActive = false;
         
-        // End Screen state tracking
-        int selectedEndOption = END_RESTART;  // Default to restart
+        int selectedEndOption = END_RESTART;
         bool endOptionSelected = false;
-        bool endHighlightActive = false;      // Track if highlights should be active
+        bool endHighlightActive = false;
         
-        // Entities for end screen
         Entity* endTitle = nullptr;
         Entity* endMessage = nullptr;
         Entity* endRestartButton = nullptr;
-        Entity* endReplayButton = nullptr;  // Add replay button
+        Entity* endReplayButton = nullptr;
         Entity* endMenuButton = nullptr;
         
-        // Managers
         RandomPositionManager positionManager;
         TransitionManager transitionManager;
         
@@ -256,16 +231,13 @@ class Game {
         Entity* questionBackground = nullptr;
         Entity* transitionLabel = nullptr;
 
-        // Reset question tracking when restarting or changing levels
         void resetUsedQuestions() { usedQuestions.clear(); }
         
-        // Position recording and replay functions
         void recordPlayerPosition();
-        void readAllPositionsFromFile();      // New function to load all positions
+        void readAllPositionsFromFile();
         void updateReplay();
         void renderReplay();
 
-        // Pause menu entities
         Entity* pauseTitle = nullptr;
         Entity* pauseResumeButton = nullptr;
         Entity* pauseSaveButton = nullptr;
@@ -274,26 +246,21 @@ class Game {
         Entity* pauseMainMenuButton = nullptr;
         Entity* pauseBackground = nullptr;
         
-        // Pause menu state tracking
-        int selectedPauseItem = PAUSE_RESUME; // Default to Resume
+        int selectedPauseItem = PAUSE_RESUME;
         bool pauseItemSelected = false;
         bool pauseHighlightActive = false;
         
-        // Settings menu entities
         Entity* settingsTitle = nullptr;
-        Entity* volumeSlider = nullptr;
         Entity* volumeLabel = nullptr;
         Entity* keybindsLabel = nullptr;
         Entity* settingsBackButton = nullptr;
         Entity* settingsBackground = nullptr;
         
-        // Settings menu state tracking
         int selectedSettingsItem = SETTINGS_VOLUME;
         bool settingsItemSelected = false;
         bool settingsHighlightActive = false;
         bool draggingVolumeSlider = false;
         
-        // Keybind information to display
         struct KeybindInfo {
             std::string action;
             std::string key;
@@ -309,18 +276,15 @@ class Game {
             {"Pause", "ESC"}
         };
 
-        // Add a variable to track where to return from settings
-        GameState previousState = STATE_MAIN_MENU; // Default to main menu
+        GameState previousState = STATE_MAIN_MENU;
 
-        // Player name for leaderboard
         std::string playerName = "";
         bool waitingForPlayerName = false;
         bool shouldSaveToLeaderboard = false;
-        std::vector<std::pair<std::string, std::string>> leaderboardEntries; // player name, formatted time
+        std::vector<std::pair<std::string, std::string>> leaderboardEntries;
         
-        // Leaderboard entities
         Entity* leaderboardTitle = nullptr;
-        Entity* leaderboardEntryLabels[5] = {nullptr}; // For the 5 entries
+        Entity* leaderboardEntryLabels[5] = {nullptr};
         Entity* leaderboardBackButton = nullptr;
 };
 #endif

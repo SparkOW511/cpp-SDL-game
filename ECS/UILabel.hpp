@@ -16,9 +16,9 @@ class UILabel : public Component {
             labelTexture = nullptr;
             clickable = false;
             onClick = nullptr;
-            hoverColor = {255, 255, 0, 255}; // Default hover color (yellow)
+            hoverColor = {255, 255, 0, 255};
             isHovered = false;
-            originalColor = color; // Store original color
+            originalColor = color;
             SetLabelText(labelText, labelFont);
         }
         
@@ -34,7 +34,6 @@ class UILabel : public Component {
         }
 
         void SetLabelText(std::string text, std::string font) {
-            // Clean up previous texture if it exists
             if (labelTexture != nullptr) {
                 SDL_DestroyTexture(labelTexture);
                 labelTexture = nullptr;
@@ -43,7 +42,6 @@ class UILabel : public Component {
             labelText = text;
             labelFont = font;
             
-            // If the text is empty, don't create a texture
             if (text.empty()) {
                 return;
             }
@@ -56,18 +54,16 @@ class UILabel : public Component {
         }
         
         void SetLabelText(std::string text, std::string font, SDL_Color color) {
-            // Clean up previous texture if it exists
             if (labelTexture != nullptr) {
                 SDL_DestroyTexture(labelTexture);
                 labelTexture = nullptr;
             }
             
             textColor = color;
-            originalColor = color; // Update original color when explicitly setting color
+            originalColor = color;
             labelText = text;
             labelFont = font;
             
-            // If the text is empty, don't create a texture
             if (text.empty()) {
                 return;
             }
@@ -79,9 +75,7 @@ class UILabel : public Component {
             SDL_QueryTexture(labelTexture, nullptr, nullptr, &position.w, &position.h);
         }
         
-        // Set the text color and recreate the texture
         void SetTextColor(SDL_Color color) {
-            // If the colors are the same, no need to recreate the texture
             if (color.r == textColor.r && color.g == textColor.g && 
                 color.b == textColor.b && color.a == textColor.a) {
                 return;
@@ -89,12 +83,10 @@ class UILabel : public Component {
             
             textColor = color;
             
-            // If the text is empty, don't create a texture
             if (labelText.empty()) {
                 return;
             }
             
-            // Clean up previous texture if it exists
             if (labelTexture != nullptr) {
                 SDL_DestroyTexture(labelTexture);
                 labelTexture = nullptr;
@@ -107,29 +99,24 @@ class UILabel : public Component {
             SDL_QueryTexture(labelTexture, nullptr, nullptr, &position.w, &position.h);
         }
         
-        // Make the label clickable with a callback function
         void SetClickable(bool clickable) {
             this->clickable = clickable;
         }
         
-        // Set the function to call when the label is clicked
         void SetOnClick(std::function<void()> onClick) {
             this->onClick = onClick;
             this->clickable = true;
         }
         
-        // Set the hover color (color that shows when mouse is over the text)
         void SetHoverColor(SDL_Color color) {
             hoverColor = color;
         }
         
-        // Check if the mouse is over the label
         bool IsMouseOver(int mouseX, int mouseY) const {
             return (mouseX >= position.x && mouseX < position.x + position.w &&
                     mouseY >= position.y && mouseY < position.y + position.h);
         }
         
-        // Handle mouse events (call this from Game::handleEvents)
         bool HandleEvent(const SDL_Event& event) {
             if (!clickable) return false;
             
@@ -137,13 +124,10 @@ class UILabel : public Component {
                 bool wasHovered = isHovered;
                 isHovered = IsMouseOver(event.motion.x, event.motion.y);
                 
-                // If hover state changed, update the texture
                 if (wasHovered != isHovered) {
                     if (isHovered) {
-                        // Save original color and set hover color
                         SetTextColor(hoverColor);
                     } else {
-                        // Restore original color
                         SetTextColor(originalColor);
                     }
                     return true;
@@ -151,7 +135,6 @@ class UILabel : public Component {
             }
             else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
                 if (IsMouseOver(event.button.x, event.button.y) && onClick) {
-                    // Play click sound
                     Game::assets->PlaySound("click", Game::volumeLevel);
                     
                     onClick();
@@ -162,13 +145,11 @@ class UILabel : public Component {
             return false;
         }
         
-        // Explicitly reset hover state and restore original color
         void ResetHoverState() {
             isHovered = false;
             SetTextColor(originalColor);
         }
         
-        // Check if element is currently hovered
         bool IsHovered() const {
             return isHovered;
         }
@@ -179,23 +160,19 @@ class UILabel : public Component {
             }
         }
         
-        // Get width of the rendered text
         int GetWidth() const {
             return position.w;
         }
         
-        // Get height of the rendered text
         int GetHeight() const {
             return position.h;
         }
         
-        // Set position of the label
         void SetPosition(int x, int y) {
             position.x = x;
             position.y = y;
         }
         
-        // Get the position of the label
         SDL_Rect GetPosition() const {
             return position;
         }
@@ -207,7 +184,6 @@ class UILabel : public Component {
         SDL_Color textColor;
         SDL_Texture* labelTexture;
         
-        // Clickable properties
         bool clickable;
         std::function<void()> onClick;
         SDL_Color hoverColor;

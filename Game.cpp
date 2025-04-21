@@ -10,26 +10,23 @@
 #include <random>
 #include <ctime>
 #include <fstream>
-#include <vector>  // Needed for storing dynamic lists of enemies/objects
-#include <set>     // Needed for used questions
-#include <string>  // Needed for object types and scientist state
-#include <utility> // Needed for pairs (optional, could use structs)
+#include <vector>
+#include <set>
+#include <string>
+#include <utility>
 
-// Global manager and entities
 Map* map;
 Manager manager;
 
-// Global entity pointers instead of references
 Entity* player = nullptr;
-Entity* finalBoss = nullptr; // Final boss entity for level 4
+Entity* finalBoss = nullptr;
 Entity* healthbar = nullptr;
 Entity* ammobar = nullptr;
 Entity* gameover = nullptr;
 Entity* clueCounter = nullptr;
 Entity* feedbackLabel = nullptr;
-Entity* scientist = nullptr; // Scientist NPC for level 4
+Entity* scientist = nullptr;
 
-// Global entity groups
 std::vector<Entity*>* tiles;
 std::vector<Entity*>* players;
 std::vector<Entity*>* enemies;
@@ -38,10 +35,8 @@ std::vector<Entity*>* projectiles;
 std::vector<Entity*>* objects;
 std::vector<Entity*>* ui;
 
-// Additional question variable to track if answer was submitted
 bool answerSubmitted = false;
 
-// Collision variables
 float damageTimer = 1.0f;
 const float damageCooldown = 0.3f;
 float objectCollisionDelay = 1.0f;
@@ -52,9 +47,9 @@ SDL_Event Game::event;
 SDL_Rect Game::camera = {0, 0, 1920, 1080};
 bool Game::isRunning = false;
 AssetManager* Game::assets = nullptr;
-int Game::totalClues = 3; // Total number of clues to collect
-int Game::totalMagazines = 3; // Total number of magazines to collect
-int Game::totalHealthPotions = 2; // Total number of health potions to collect
+int Game::totalClues = 3;
+int Game::totalMagazines = 3;
+int Game::totalHealthPotions = 2;
 int Game::collectedClues = 0;
 bool Game::gameOver = false;
 bool Game::playerWon = false;
@@ -64,9 +59,9 @@ bool Game::showFeedback = false;
 Uint32 Game::feedbackStartTime = 0;
 Entity* Game::feedbackLabel = nullptr;
 int Game::currentLevel = 1;
-int Game::maxLevels = 4; // Set the maximum number of levels here
-bool Game::showingExitInstructions = false; // Initialize to false
-GameState Game::gameState = STATE_MAIN_MENU; // Initialize to main menu
+int Game::maxLevels = 4;
+bool Game::showingExitInstructions = false;
+GameState Game::gameState = STATE_MAIN_MENU;
 bool Game::level4MapChanged = false;
 bool Game::finalBossDefeated = false;
 bool Game::bossMusicPlaying = false;
@@ -76,41 +71,36 @@ bool Game::returnToMainMenu = false;
 Uint32 Game::gameStartTime = 0;
 Uint32 Game::gameplayTime = 0;
 Entity* Game::timerLabel = nullptr;
-int Game::volumeLevel = 75; // Default volume level to 75%
+int Game::volumeLevel = 75;
 
-// Initialize music tracking
 std::string Game::currentMusic = "";
 
-// Replay related static variables
 bool Game::isRecordingPositions = false;
 bool Game::isReplaying = false;
 int Game::replayPositionIndex = 0;
 Vector2D Game::lastRecordedPosition = Vector2D(0, 0);
-Uint32 Game::replayFrameTime = 20; // Target ~60 FPS playback (1000ms / 60)
+Uint32 Game::replayFrameTime = 20;
 Uint32 Game::lastReplayFrameTime = 0;
 
-// Main menu variables
 Entity* menuTitle = nullptr;
 Entity* menuNewGameButton = nullptr;
 Entity* menuLoadGameButton = nullptr;
-Entity* menuSettingsButton = nullptr;  // Add settings button
-Entity* menuLeaderboardButton = nullptr;  // Add leaderboard button
+Entity* menuSettingsButton = nullptr;
+Entity* menuLeaderboardButton = nullptr;
 Entity* menuExitButton = nullptr;
 int selectedMenuItem = MENU_NEW_GAME;
 bool menuHighlightActive = false;
 bool menuItemSelected = false;
 
-// End screen variables
 Entity* endTitle = nullptr;
 Entity* endMessage = nullptr;
 Entity* endRestartButton = nullptr;
-Entity* endReplayButton = nullptr;  // Add replay button
+Entity* endReplayButton = nullptr;
 Entity* endMenuButton = nullptr;
 int selectedEndOption = END_RESTART;
 bool endOptionSelected = false;
 bool endHighlightActive = false;
 
-// Pause menu variables
 Entity* pauseTitle = nullptr;
 Entity* pauseResumeButton = nullptr;
 Entity* pauseSaveButton = nullptr;
@@ -122,9 +112,7 @@ int selectedPauseItem = PAUSE_RESUME;
 bool pauseHighlightActive = false;
 bool pauseItemSelected = false;
 
-// Settings menu variables
 Entity* settingsTitle = nullptr;
-Entity* volumeSlider = nullptr;
 Entity* volumeLabel = nullptr;
 Entity* keybindsLabel = nullptr;
 Entity* settingsBackButton = nullptr;
@@ -134,53 +122,45 @@ bool settingsHighlightActive = false;
 bool settingsItemSelected = false;
 bool draggingVolumeSlider = false;
 
-// Add new variables after static declarations at the top of the file
-bool Game::hasSavedDuringExitInstructions = false; // Add this new variable
-std::string Game::savedExitInstructionsText = ""; // Add this to store original exit instructions
+bool Game::hasSavedDuringExitInstructions = false;
+std::string Game::savedExitInstructionsText = "";
 
-// Helper to write a string to a binary file
 void writeString(std::ofstream& file, const std::string& str) {
     size_t len = str.length();
     file.write(reinterpret_cast<const char*>(&len), sizeof(len));
     file.write(str.c_str(), len);
 }
 
-// Helper to read a string from a binary file
 bool readString(std::ifstream& file, std::string& str) {
     size_t len;
     file.read(reinterpret_cast<char*>(&len), sizeof(len));
-    if (!file || file.gcount() != sizeof(len)) return false; // Check read success and size
+    if (!file || file.gcount() != sizeof(len)) return false;
 
-    // Protect against excessively large strings potentially indicating corrupted data
-    if (len > 1024) { // Set a reasonable limit (e.g., 1KB for object types)
+    if (len > 1024) {
         return false;
     }
 
     str.resize(len);
-    // Check if resize was successful (might fail for very large len)
     if (str.length() != len) {
          return false;
     }
 
-    // Only read if len > 0 to avoid issues with &str[0] on empty strings
     if (len > 0) {
         file.read(&str[0], len);
-        if (!file || file.gcount() != len) return false; // Check read success and size
+        if (!file || file.gcount() != len) return false;
     }
     return true;
 }
 
-// Simple struct to hold enemy data for saving/loading
 struct EnemySaveData {
     float x, y;
     int health;
-    bool isBoss; // To differentiate the final boss
+    bool isBoss;
 };
 
-// Simple struct to hold object data for saving/loading
 struct ObjectSaveData {
     float x, y;
-    std::string type; // "clue", "magazine", "healthpotion", "scientist", "cactus"
+    std::string type;
 };
 
 Game::Game()
@@ -261,7 +241,6 @@ Game::~Game()
 }
 
 void Game::initEntities() {
-    // Create entities
     player = &manager.addEntity();
     healthbar = &manager.addEntity();
     ammobar = &manager.addEntity();
@@ -278,7 +257,6 @@ void Game::initEntities() {
     answer4Label = &manager.addEntity();
     questionBackground = &manager.addEntity();
     
-    // Get group references
     tiles = &manager.getGroup(Game::groupMap);
     players = &manager.getGroup(Game::groupPlayers);
     enemies = &manager.getGroup(Game::groupEnemies);
@@ -287,77 +265,65 @@ void Game::initEntities() {
     objects = &manager.getGroup(Game::groupObjects);
     ui = &manager.getGroup(Game::groupUI);
     
-    // Create clues at random locations
     for (int i = 0; i < totalClues; i++) {
         Vector2D cluePos = positionManager.findRandomCluePosition(currentLevel);
         assets->CreateObject(cluePos.x, cluePos.y, "clue");
     }
     
-    // Create magazine pickups at random locations using magazine-specific function
     for (int i = 0; i < totalMagazines; i++) {
         Vector2D magazinePos = positionManager.findRandomMagazinePosition();
         assets->CreateObject(magazinePos.x, magazinePos.y, "magazine");
     }
     
-    // Create health potion pickups at random locations using potion-specific function
     for (int i = 0; i < totalHealthPotions; i++) {
         Vector2D potionPos = positionManager.findRandomHealthPotionPosition();
         assets->CreateObject(potionPos.x, potionPos.y, "healthpotion");
     }
     
-    // Find a random valid spawn position for the player
     Vector2D playerSpawnPos = positionManager.findRandomSpawnPosition(currentLevel);
     
-    // Setup player entity with random position
     player->addComponent<TransformComponent>(playerSpawnPos.x, playerSpawnPos.y, 32, 32, 3);
     player->addComponent<SpriteComponent>("player", true);
-    // Use the specific constructor for player collider dimensions and offset (scaled)
     player->addComponent<ColliderComponent>("player", 21 * 3, 29 * 3, 6 * 3, 4 * 3);
     player->addComponent<HealthComponent>(100);
     player->addComponent<AmmoComponent>(30, 10);
     player->addComponent<KeyboardController>();
     player->addGroup(Game::groupPlayers);
 
-    // Create multiple enemies at random positions - number based on level
-    int numEnemies = 3; // Default for level 1
+    int numEnemies = 3;
     if (currentLevel == 2) {
-        numEnemies = 8; // More enemies in level 2
+        numEnemies = 8;
     } else if (currentLevel == 3) {
-        numEnemies = 13; // Even more enemies in level 3
+        numEnemies = 13;
     } else if (currentLevel == 4) {
-        numEnemies = 8; // Fewer enemies in level 4 to compensate for the boss
+        numEnemies = 8;
     }
     
-    // Create the final boss for level 4
     if (currentLevel == 4) {
         finalBoss = &manager.addEntity();
         
-        // Use the exact coordinates from the map (position 4 at 34,15)
         Vector2D bossPos = {34*64, 15*64};
         
-        // Make the boss larger and stronger than regular enemies
-        // The sprite size is 32x32 but we use a larger scale and collider
-        finalBoss->addComponent<TransformComponent>(bossPos.x, bossPos.y, 32, 32, 4); // Use 32x32 at scale 4
-        finalBoss->addComponent<SpriteComponent>("boss", true); // Use boss sprite
+        finalBoss->addComponent<TransformComponent>(bossPos.x, bossPos.y, 32, 32, 4);
+        finalBoss->addComponent<SpriteComponent>("boss", true);
         finalBoss->addComponent<ColliderComponent>("boss");
-        finalBoss->addComponent<HealthComponent>(500); // Much more health
+        finalBoss->addComponent<HealthComponent>(500);
         finalBoss->addComponent<EnemyAIComponent>(manager);
-        finalBoss->getComponent<EnemyAIComponent>().setSpeed(0.5f); // Slower but stronger
-        finalBoss->getComponent<EnemyAIComponent>().setChaseRange(500.0f); // Double chase range for boss
+        finalBoss->getComponent<EnemyAIComponent>().setSpeed(0.5f);
+        finalBoss->getComponent<EnemyAIComponent>().setChaseRange(500.0f);
         finalBoss->addGroup(Game::groupEnemies);
         
-        // Create the scientist at position (35,5)
         scientist = &manager.addEntity();
         Vector2D scientistPos = {34*64, 3*64};
         scientist->addComponent<TransformComponent>(scientistPos.x, scientistPos.y, 32, 32, 3);
         scientist->addComponent<SpriteComponent>("scientist", true);
         scientist->addComponent<ColliderComponent>("scientist");
-        scientist->getComponent<SpriteComponent>().Play("Locked"); // Use regular Idle animation since we don't have specific scientist animations
-        scientist->addGroup(Game::groupObjects); // Add to objects group so it's visible
+        scientist->getComponent<SpriteComponent>().Play("Locked");
+        scientist->addGroup(Game::groupObjects);
         
     } else {
-        finalBoss = nullptr; // Clear final boss pointer for other levels
-        scientist = nullptr; // Clear scientist pointer for other levels
+        finalBoss = nullptr;
+        scientist = nullptr;
     }
     
     for (int i = 0; i < numEnemies; i++) {
@@ -372,7 +338,6 @@ void Game::initEntities() {
         enemy.addGroup(Game::groupEnemies);
     }
 
-    // Setup UI entities with improved positioning for larger fonts
     healthbar->addComponent<UILabel>(20, 20, "Test", "font1", white);
     ammobar->addComponent<UILabel>(20, 60, "Test", "font1", white);
     gameover->addComponent<UILabel>(0, 0, "", "font2", white);
@@ -387,7 +352,6 @@ void Game::initEntities() {
     feedbackLabel->addComponent<UILabel>(0, 650, "", "font2", white);
     transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
     
-    // No need to manually add UI entities to groupUI as the UILabel component does this automatically
 }
 
 void Game::init(const char* title, int xpos, int ypos, int width, int height, bool fullscreen)
@@ -412,8 +376,7 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         std::cout << "Error initializing SDL_ttf" << std::endl;
     }
 
-    // Initialize SDL_mixer with simpler configuration
-    int initResult = Mix_Init(0); // Initialize without any specific format flags
+    int initResult = Mix_Init(0);
     printf("SDL_mixer initialization result: %d\n", initResult);
     
     if(Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) < 0) {
@@ -423,17 +386,14 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         std::cout << "SDL_mixer initialized successfully" << std::endl;
     }
     
-    // Allocate fewer mixing channels to save memory
     Mix_AllocateChannels(8);
 
-    // Clean up previous asset manager if it exists
     if(assets != nullptr) {
         delete assets;
     }
 
     assets = new AssetManager(&manager);
 
-    // Load textures
     assets->AddTexture("terrainlvl1", "./assets/lvl1/TerrainTexturesLevel1.png");
     assets->AddTexture("terrainlvl2", "./assets/lvl2/TerrainTexturesLevel2.png");
     assets->AddTexture("terrainlvl3", "./assets/lvl3/TerrainTexturesLevel3.png");
@@ -451,11 +411,9 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddTexture("healthpotion", "./assets/objects/healthpotion.png");
     assets->AddTexture("cactus", "./assets/objects/cactus.png");
     
-    // Load fonts
     assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
     assets->AddFont("font2", "./assets/MINECRAFT.TTF", 72);
 
-    // Load sounds
     assets->AddSound("click", "./assets/sounds/click.mp3");
     assets->AddSound("shoot", "./assets/sounds/shoot.wav");
     assets->AddSound("hurt", "./assets/sounds/hurt.wav");
@@ -463,14 +421,12 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddSound("gameOver", "./assets/sounds/gameover.mp3");
     assets->AddSound("victory", "./assets/sounds/victory.mp3");
 
-    // Just removed the clue sound, keeping others
     assets->AddSound("magazine", "./assets/sounds/objects/magazine.wav");
     assets->AddSound("healthpotion", "./assets/sounds/objects/healthpotion.wav");
 
     assets->AddSound("correctanswer", "./assets/sounds/question/correctanswer.mp3");
     assets->AddSound("wronganswer", "./assets/sounds/question/wronganswer.mp3");
     
-    // Simplify music loading to avoid issues
     printf("Loading music files in OGG format for SDL_mixer compatibility\n");
     assets->AddMusic("mainmenu", "./assets/sounds/levels/mainmenu.ogg");
     assets->AddMusic("level1", "./assets/sounds/levels/level1.ogg");
@@ -478,31 +434,22 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddMusic("level3-4", "./assets/sounds/levels/level3-4.ogg");
     assets->AddMusic("boss", "./assets/sounds/levels/bossmusic.ogg");
     
-    // Set initial volume
     assets->SetMasterVolume(volumeLevel);
 
-    // Initialize random number generator
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
     
-    // Initialize transition manager globally
     transitionManager.init(this, &manager);
     
-    // Create transition label for transitions between levels
     transitionLabel = &manager.addEntity();
     transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
     transitionManager.mTransitionLabel = transitionLabel;
     
-    // Set initial game state
     gameState = STATE_MAIN_MENU;
     
-    // Initialize the appropriate game elements based on state
     if (gameState == STATE_MAIN_MENU) {
         initMainMenu();
     } else {
-        // Initialize the game entities and map for gameplay
-    initEntities();
-        
-        // Load first level
+        initEntities();
         loadLevel(currentLevel);
     }
 }
@@ -517,32 +464,26 @@ void Game::handleEvents()
             break;
             
         case SDL_KEYDOWN:
-            // Handle replay mode ESC key to exit
             if (gameState == STATE_REPLAY && event.key.keysym.sym == SDLK_ESCAPE) {
-                // Stop replay and return to main menu
                 isReplaying = false;
                 returnToMainMenu = true;
                 break;
             }
             
             if (gameState == STATE_MAIN_MENU) {
-                // Handle menu navigation
                 switch(event.key.keysym.sym) {
                     case SDLK_UP:
                         selectedMenuItem = (selectedMenuItem - 1 + MENU_ITEMS_COUNT) % MENU_ITEMS_COUNT;
-                        menuHighlightActive = true; // Activate highlighting when using keyboard
-                        // Force update menu items and reset all hover states
+                        menuHighlightActive = true;
                         updateMainMenu();
                         break;
                     case SDLK_DOWN:
                         selectedMenuItem = (selectedMenuItem + 1) % MENU_ITEMS_COUNT;
-                        menuHighlightActive = true; // Activate highlighting when using keyboard
-                        // Force update menu items and reset all hover states
+                        menuHighlightActive = true;
                         updateMainMenu();
                         break;
                     case SDLK_RETURN:
                     case SDLK_SPACE:
-                        // Handle menu selection
                         switch(selectedMenuItem) {
                             case MENU_NEW_GAME:
                                 startGame();
@@ -555,7 +496,6 @@ void Game::handleEvents()
                                 initSettingsMenu();
                                 break;
                             case MENU_LEADERBOARD:
-                                // Initialize and display the leaderboard
                                 initLeaderboard();
                                 gameState = STATE_LEADERBOARD;
                                 break;
@@ -571,11 +511,9 @@ void Game::handleEvents()
             }
             else if (gameOver) {
                 if (event.key.keysym.sym == SDLK_r) {
-                    // Restart the game
                     restart();
                 }
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    // Exit the game
                     isRunning = false;
                 }
             }
@@ -606,28 +544,21 @@ void Game::handleEvents()
             }
             else if (gameState == STATE_GAME) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    // Toggle pause menu instead of returning to main menu
                     togglePause();
                 }
-                // Handle 'E' key press for scientist interaction
                 else if (event.key.keysym.sym == SDLK_e && currentLevel == 4 && canRescueScientist && !scientistRescued && scientist != nullptr) {
-                    // Check if player is close enough to scientist
                     Vector2D playerPos = player->getComponent<TransformComponent>().position;
                     Vector2D scientistPos = scientist->getComponent<TransformComponent>().position;
                     float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
                     
-                    if (distance <= 100) { // Within interaction range
-                        // Change scientist animation to idle
+                    if (distance <= 100) {
                         scientist->getComponent<SpriteComponent>().Play("Idle");
                         scientistRescued = true;
-                        
-                        // Initialize the end screen with victory
                         initEndScreen(true);
                     }
                 }
             }
             else if (gameState == STATE_PAUSE) {
-                // Handle navigation in pause menu
                 switch(event.key.keysym.sym) {
                     case SDLK_UP:
                         selectedPauseItem = (selectedPauseItem - 1 + PAUSE_ITEMS_COUNT) % PAUSE_ITEMS_COUNT;
@@ -641,41 +572,34 @@ void Game::handleEvents()
                         break;
                     case SDLK_RETURN:
                     case SDLK_SPACE:
-                        // Handle selection
                         switch(selectedPauseItem) {
                             case PAUSE_RESUME:
-                                togglePause(); // Resume game
+                                togglePause();
                                 break;
                             case PAUSE_SAVE:
-                                saveGame(); // Save game (stub)
+                                saveGame();
                                 break;
                             case PAUSE_RESTART:
-                                // Call restart function directly instead of setting needsRestart flag
                                 restart();
                                 break;
                             case PAUSE_SETTINGS:
-                                // Go to settings menu
                                 gameState = STATE_SETTINGS;
                                 initSettingsMenu();
                                 break;
                             case PAUSE_MAIN_MENU:
-                                // Return to main menu
                                 returnToMainMenu = true;
                                 break;
                         }
                         break;
                     case SDLK_ESCAPE:
-                        // Resume game when pressing ESC in pause menu
                         togglePause();
                         break;
                 }
             }
             else if (gameState == STATE_SETTINGS) {
-                // Handle navigation in settings menu
                 switch(event.key.keysym.sym) {
                     case SDLK_UP:
                     case SDLK_DOWN:
-                        // Toggle between volume and back button
                         selectedSettingsItem = (selectedSettingsItem == SETTINGS_VOLUME) ? 
                                               SETTINGS_BACK : SETTINGS_VOLUME;
                         settingsHighlightActive = true;
@@ -683,14 +607,12 @@ void Game::handleEvents()
                         break;
                     case SDLK_LEFT:
                         if (selectedSettingsItem == SETTINGS_VOLUME) {
-                            // Decrease volume
                             volumeLevel = std::max(0, volumeLevel - 5);
                             updateSettingsMenu();
                         }
                         break;
                     case SDLK_RIGHT:
                         if (selectedSettingsItem == SETTINGS_VOLUME) {
-                            // Increase volume
                             volumeLevel = std::min(100, volumeLevel + 5);
                             updateSettingsMenu();
                         }
@@ -698,42 +620,35 @@ void Game::handleEvents()
                     case SDLK_RETURN:
                     case SDLK_SPACE:
                         if (selectedSettingsItem == SETTINGS_BACK) {
-                            // Return to previous state (main menu or pause)
                             gameState = previousState;
                             applySettings();
                         }
                         break;
                     case SDLK_ESCAPE:
-                        // Return to previous state
                         gameState = previousState;
                         applySettings();
                         break;
                 }
             }
             else if (gameState == STATE_END_SCREEN) {
-                // Handle navigation in end screen
                 switch(event.key.keysym.sym) {
                     case SDLK_UP:
                     case SDLK_DOWN:
-                        // Toggle between the two options
                         selectedEndOption = (selectedEndOption == END_RESTART) ? END_MAIN_MENU : END_RESTART;
                         endHighlightActive = true;
                         updateEndScreen();
                         break;
                     case SDLK_RETURN:
                     case SDLK_SPACE:
-                        // Handle selection directly
                         if (selectedEndOption == END_RESTART) {
-                            restart(); // Call restart function directly
+                            restart();
                         } else if (selectedEndOption == END_REPLAY) {
-                            replay(); // Call replay function
+                            replay();
                         } else if (selectedEndOption == END_MAIN_MENU) {
-                            // Set flag for deferred return to main menu
                             returnToMainMenu = true;
                         }
                         break;
                     case SDLK_ESCAPE:
-                        // Go to main menu directly
                         returnToMainMenu = true;
                         break;
                 }
@@ -742,10 +657,8 @@ void Game::handleEvents()
                 if (event.key.keysym.sym == SDLK_ESCAPE || 
                     event.key.keysym.sym == SDLK_RETURN || 
                     event.key.keysym.sym == SDLK_SPACE) {
-                    // Return to main menu
                     gameState = STATE_MAIN_MENU;
                     
-                    // Clean up leaderboard UI
                     if (leaderboardTitle) leaderboardTitle->destroy();
                     for (auto& label : leaderboardEntryLabels) {
                         if (label) label->destroy();
@@ -753,27 +666,23 @@ void Game::handleEvents()
                     }
                     if (leaderboardBackButton) leaderboardBackButton->destroy();
                     
-                    // Re-init main menu
                     initMainMenu();
                 }
             }
             break;
             
-        // Handle mouse events for clickable UI elements
         case SDL_MOUSEMOTION:
             if (gameState == STATE_MAIN_MENU) {
-                // First force reset hover states on all menu items before handling new hover
                 bool anyHovered = false;
                 int mouseX = event.motion.x;
                 int mouseY = event.motion.y;
                 
-                // Handle individual hover events
                 if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
                     bool isOver = menuNewGameButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
                     if (isOver) {
                         anyHovered = true;
                         selectedMenuItem = MENU_NEW_GAME;
-                        menuHighlightActive = true; // Enable highlighting when hovering
+                        menuHighlightActive = true;
                     }
                 }
                 
@@ -782,7 +691,7 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedMenuItem = MENU_LOAD_GAME;
-                        menuHighlightActive = true; // Enable highlighting when hovering
+                        menuHighlightActive = true;
                     }
                 }
                 
@@ -791,7 +700,7 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedMenuItem = MENU_SETTINGS;
-                        menuHighlightActive = true; // Enable highlighting when hovering
+                        menuHighlightActive = true;
                     }
                 }
                 
@@ -800,7 +709,7 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedMenuItem = MENU_LEADERBOARD;
-                        menuHighlightActive = true; // Enable highlighting when hovering
+                        menuHighlightActive = true;
                     }
                 }
                 
@@ -809,16 +718,14 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedMenuItem = MENU_EXIT;
-                        menuHighlightActive = true; // Enable highlighting when hovering
+                        menuHighlightActive = true;
                     }
                 }
                 
-                // If no items are being hovered and we previously had highlights active
                 if (!anyHovered && menuHighlightActive) {
-                    menuHighlightActive = false; // Disable highlights when not hovering
-                    updateMainMenu(); // Update to show no highlights
+                    menuHighlightActive = false;
+                    updateMainMenu();
                 } else if (anyHovered) {
-                    // Process hover effects
                     if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
                         menuNewGameButton->getComponent<UILabel>().HandleEvent(event);
                     }
@@ -841,12 +748,10 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_PAUSE) {
-                // Handle pause menu mouse hover
                 bool anyHovered = false;
                 int mouseX = event.motion.x;
                 int mouseY = event.motion.y;
                 
-                // Check each pause menu button for hover
                 if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
                     bool isOver = pauseResumeButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
                     if (isOver) {
@@ -892,7 +797,6 @@ void Game::handleEvents()
                     }
                 }
                 
-                // Update hover states
                 if (!anyHovered && pauseHighlightActive) {
                     pauseHighlightActive = false;
                     updatePauseMenu();
@@ -901,12 +805,10 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_SETTINGS) {
-                // Handle settings menu mouse hover
                 bool anyHovered = false;
                 int mouseX = event.motion.x;
                 int mouseY = event.motion.y;
                 
-                // Check for volume slider hover and drag
                 int screenCenter = 1920 / 2;
                 int sliderWidth = 400;
                 int sliderHeight = 20;
@@ -931,13 +833,10 @@ void Game::handleEvents()
                         settingsHighlightActive = true;
                     }
                     
-                    // Process hover effect for back button
                     settingsBackButton->getComponent<UILabel>().HandleEvent(event);
                 }
                 
-                // Update volume if dragging
                 if (draggingVolumeSlider) {
-                    // Calculate volume based on mouse X position relative to slider
                     if (mouseX < sliderX) {
                         volumeLevel = 0;
                     } else if (mouseX > sliderX + sliderWidth) {
@@ -946,37 +845,32 @@ void Game::handleEvents()
                         volumeLevel = ((mouseX - sliderX) * 100) / sliderWidth;
                     }
                     
-                    // Update the volume label
                     if (volumeLabel && volumeLabel->hasComponent<UILabel>()) {
                         std::stringstream volSS;
                         volSS << "Volume: " << volumeLevel << "%";
                         volumeLabel->getComponent<UILabel>().SetLabelText(volSS.str(), "font1");
                         
-                        // Center the updated label
                         int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
                         int volLabelX = (1920 - volLabelWidth) / 2;
                         volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
                     }
                 }
                 
-                // Update hover states
                 if (!anyHovered && settingsHighlightActive && !draggingVolumeSlider) {
                     settingsHighlightActive = false;
                 }
             }
             else if (gameState == STATE_END_SCREEN) {
-                // First reset hover states on all end screen items
                 bool anyHovered = false;
                 int mouseX = event.motion.x;
                 int mouseY = event.motion.y;
                 
-                // Handle individual hover events
                 if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
                     bool isOver = endRestartButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
                     if (isOver) {
                         anyHovered = true;
                         selectedEndOption = END_RESTART;
-                        endHighlightActive = true; // Enable highlighting when hovering
+                        endHighlightActive = true;
                     }
                 }
                 
@@ -985,7 +879,7 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedEndOption = END_REPLAY;
-                        endHighlightActive = true; // Enable highlighting when hovering
+                        endHighlightActive = true;
                     }
                 }
                 
@@ -994,16 +888,14 @@ void Game::handleEvents()
                     if (isOver) {
                         anyHovered = true;
                         selectedEndOption = END_MAIN_MENU;
-                        endHighlightActive = true; // Enable highlighting when hovering
+                        endHighlightActive = true;
                     }
                 }
                 
-                // If no items are being hovered and we previously had highlights active
                 if (!anyHovered && endHighlightActive) {
-                    endHighlightActive = false; // Disable highlights when not hovering
-                    updateEndScreen(); // Update to show no highlights
+                    endHighlightActive = false;
+                    updateEndScreen();
                 } else if (anyHovered) {
-                    // Process hover effects
                     if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
                         endRestartButton->getComponent<UILabel>().HandleEvent(event);
                     }
@@ -1018,7 +910,6 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_LEADERBOARD) {
-                // Handle hover for back button
                 if (leaderboardBackButton && leaderboardBackButton->hasComponent<UILabel>()) {
                     leaderboardBackButton->getComponent<UILabel>().HandleEvent(event);
                 }
@@ -1027,7 +918,6 @@ void Game::handleEvents()
             
         case SDL_MOUSEBUTTONDOWN:
             if (gameState == STATE_MAIN_MENU) {
-                // Handle mouse clicks for menu buttons
                 if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
                     menuNewGameButton->getComponent<UILabel>().HandleEvent(event);
                 }
@@ -1049,7 +939,6 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_PAUSE) {
-                // Handle mouse clicks for pause menu buttons
                 if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
                     pauseResumeButton->getComponent<UILabel>().HandleEvent(event);
                 }
@@ -1071,11 +960,8 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_SETTINGS) {
-                // Handle mouse clicks for settings menu
                 int mouseX = event.button.x;
                 int mouseY = event.button.y;
-                
-                // Check if clicking on volume slider
                 int screenCenter = 1920 / 2;
                 int sliderWidth = 400;
                 int sliderHeight = 20;
@@ -1089,7 +975,6 @@ void Game::handleEvents()
                 if (isOverSlider) {
                     draggingVolumeSlider = true;
                     
-                    // Set volume immediately based on click position
                     if (mouseX < sliderX) {
                         volumeLevel = 0;
                     } else if (mouseX > sliderX + sliderWidth) {
@@ -1098,13 +983,11 @@ void Game::handleEvents()
                         volumeLevel = ((mouseX - sliderX) * 100) / sliderWidth;
                     }
                     
-                    // Update the volume label
                     if (volumeLabel && volumeLabel->hasComponent<UILabel>()) {
                         std::stringstream volSS;
                         volSS << "Volume: " << volumeLevel << "%";
                         volumeLabel->getComponent<UILabel>().SetLabelText(volSS.str(), "font1");
                         
-                        // Center the updated label
                         int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
                         int volLabelX = (1920 - volLabelWidth) / 2;
                         volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
@@ -1116,7 +999,6 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_END_SCREEN) {
-                // Handle mouse clicks for end screen buttons
                 if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
                     endRestartButton->getComponent<UILabel>().HandleEvent(event);
                 }
@@ -1130,7 +1012,6 @@ void Game::handleEvents()
                 }
             }
             else if (gameState == STATE_LEADERBOARD) {
-                // Handle click on back button
                 if (leaderboardBackButton && leaderboardBackButton->hasComponent<UILabel>()) {
                     leaderboardBackButton->getComponent<UILabel>().HandleEvent(event);
                 }
@@ -1154,16 +1035,14 @@ void Game::update()
     float deltaTime = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
     
-    // Handle deferred main menu return (keeping this logic)
     if (returnToMainMenu) {
-        returnToMainMenu = false; // Reset flag
+        returnToMainMenu = false;
         
-        // Reset all game state variables just like when restarting
         gameOver = false;
         playerWon = false;
         collectedClues = 0;
         damageTimer = 1.0f;
-        hurtSoundTimer = 0.0f; // Reset hurt sound timer
+        hurtSoundTimer = 0.0f;
         objectCollisionDelay = 1.0f;
         objectCollisionsEnabled = false;
         questionActive = false;
@@ -1172,25 +1051,20 @@ void Game::update()
         showingExitInstructions = false;
         level4MapChanged = false;
         finalBossDefeated = false;
-        bossMusicPlaying = false; // Reset boss music state
-        scientistRescued = false; // Reset scientist state
-        canRescueScientist = false; // Reset scientist interaction flag
+        bossMusicPlaying = false;
+        scientistRescued = false;
+        canRescueScientist = false;
         currentLevel = 1;
         
-        // Reset used questions
         resetUsedQuestions();
         
-        // Set clue count for level 1
         totalClues = 3;
         
-        // Reset position tracking
         positionManager.resetPositions();
         
-        // Reset gameplay timer
         gameStartTime = 0;
         gameplayTime = 0;
         
-        // Reset all entity pointers
         player = nullptr;
         finalBoss = nullptr;
         healthbar = nullptr;
@@ -1206,70 +1080,54 @@ void Game::update()
         answer4Label = nullptr;
         questionBackground = nullptr;
         
-        // Clean up game entities
         if (map != nullptr) {
             delete map;
             map = nullptr;
         }
         
-        // Clear all entities
         manager.clear();
         
-        // Set the game state
         gameState = STATE_MAIN_MENU;
         
-        // Initialize main menu
         initMainMenu();
         
-        // Return early to avoid processing other game logic
         return;
     }
     
-    // Handle updates based on current game state
     switch (gameState) {
         case STATE_MAIN_MENU:
-            // Nothing to update in the main menu except UI
             break;
             
         case STATE_END_SCREEN:
-            // Update end screen elements
             updateEndScreen();
             break;
             
         case STATE_PAUSE:
-            // Update pause menu elements
             updatePauseMenu();
             break;
             
         case STATE_SETTINGS:
-            // Update settings menu elements
             updateSettingsMenu();
             break;
             
         case STATE_REPLAY:
-            // Update replay ONLY
             updateReplay();
             break; 
             
         case STATE_LEADERBOARD:
-            // Update leaderboard elements
             updateLeaderboard();
             break;
             
         case STATE_GAME:
-            // Always refresh entity manager first in GAME state
             manager.refresh();
             
-            // Record player position if recording is enabled and player exists
-            if (player && player->isActive() && !isReplaying) { // Ensure not replaying
+            if (player && player->isActive() && !isReplaying) {
                 recordPlayerPosition();
             }
             
-            // Update timer
             if (gameStartTime > 0 && !gameOver) {
                 gameplayTime = currentTime - gameStartTime;
                 
-                // Format time as MM:SS
                 Uint32 totalSeconds = gameplayTime / 1000;
                 Uint32 minutes = totalSeconds / 60;
                 Uint32 seconds = totalSeconds % 60;
@@ -1281,62 +1139,49 @@ void Game::update()
                 if (timerLabel != nullptr && timerLabel->hasComponent<UILabel>()) {
                     timerLabel->getComponent<UILabel>().SetLabelText(timeSS.str(), "font1");
                     
-                    // Get the width of the updated text and recenter it
                     int timerWidth = timerLabel->getComponent<UILabel>().GetWidth();
-                    int xPos = (1920 - timerWidth) / 2; // Center horizontally
-                    timerLabel->getComponent<UILabel>().SetPosition(xPos, 20); // Keep at top
+                    int xPos = (1920 - timerWidth) / 2;
+                    timerLabel->getComponent<UILabel>().SetPosition(xPos, 20);
                 }
             }
             
-            // Handle transition if active
             if (transitionManager.isTransitioning()) {
                 if (transitionManager.updateTransition()) {
-                    // Transition is complete, proceed with level change
-                    // Reset game state variables for next level
                     collectedClues = 0;
                     damageTimer = 1.0f;
-                    hurtSoundTimer = 0.0f; // Reset hurt sound timer
+                    hurtSoundTimer = 0.0f;
                     objectCollisionDelay = 1.0f;
                     objectCollisionsEnabled = false;
                     questionActive = false;
                     pendingClueEntity = nullptr;
                     showFeedback = false;
-                    showingExitInstructions = false; // Reset exit instructions flag
+                    showingExitInstructions = false;
                     
-                    // Reset position tracking
                     positionManager.resetPositions();
                     
-                    // Store current level before incrementing
                     int nextLevel = currentLevel + 1;
                     currentLevel = nextLevel;
                     
-                    // Clear all entities including UI
                     manager.clear();
                     
-                    // Make sure map is properly deallocated
                     if (map != nullptr) {
                         delete map;
                         map = nullptr;
                     }
                     
-                    // Load the new level map
                     loadLevel(currentLevel);
                     
-                    // Re-initialize all game entities and UI
                     initEntities();
                     
-                    // Recreate transition label after entity initialization
                     transitionLabel = &manager.addEntity();
                     transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
                     
-                    // Reinitialize the transition manager after entities are created
                     transitionManager.mTransitionLabel = transitionLabel;
                     transitionManager.init(this, &manager);
                 }
                 return;
             }
     
-            // Handle animations for all entities regardless of game state
             for(auto& p : *players) {
                 if (p->hasComponent<SpriteComponent>()) {
                     p->getComponent<SpriteComponent>().update();
@@ -1344,36 +1189,29 @@ void Game::update()
             }
             
             for(auto& e : *enemies) {
-                // Add safety check for null or inactive enemy pointers
                 if (!e || !e->isActive()) {
                     continue; 
                 }
 
-                // Check and update SpriteComponent
                 if (e->hasComponent<SpriteComponent>()) {
                     try {
                          e->getComponent<SpriteComponent>().update();
                     } catch (const std::exception& ex) {
-                         // Keep try/catch? User didn't specify. Keep for now.
-                         std::cerr << "Exception during SpriteComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
+                         std::cerr << "Exception during SpriteComponent::update(): " << ex.what() << std::endl;
                     } catch (...) {
-                         std::cerr << "Unknown exception during SpriteComponent::update()." << std::endl; // Keep non-debug error
+                         std::cerr << "Unknown exception during SpriteComponent::update()." << std::endl;
                     }
-                } else {
                 }
-
-                // Check and update EnemyAIComponent or set Idle animation
                 if (!questionActive && !gameOver) {
                     if (e->hasComponent<EnemyAIComponent>()) {
-                         // ---> ADD PLAYER CHECK HERE <---
                          if (!player || !player->isActive()) {
                          } else {
                             try {
                                 e->getComponent<EnemyAIComponent>().update();
                             } catch (const std::exception& ex) {
-                                std::cerr << "Exception during EnemyAIComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
+                                std::cerr << "Exception during EnemyAIComponent::update(): " << ex.what() << std::endl;
                             } catch (...) {
-                                std::cerr << "Unknown exception during EnemyAIComponent::update()." << std::endl; // Keep non-debug error
+                                std::cerr << "Unknown exception during EnemyAIComponent::update()." << std::endl;
                             }
                          }
                     } else {
@@ -1382,9 +1220,9 @@ void Game::update()
                     try {
                         e->getComponent<SpriteComponent>().Play("Idle");
                     } catch (const std::exception& ex) {
-                         std::cerr << "Exception during SpriteComponent::Play('Idle'): " << ex.what() << std::endl; // Keep non-debug error
+                         std::cerr << "Exception during SpriteComponent::Play('Idle'): " << ex.what() << std::endl;
                     } catch (...) {
-                         std::cerr << "Unknown exception during SpriteComponent::Play('Idle')." << std::endl; // Keep non-debug error
+                         std::cerr << "Unknown exception during SpriteComponent::Play('Idle')." << std::endl;
                     }
                 }
             }
@@ -1401,9 +1239,7 @@ void Game::update()
                 }
             }
             
-            // Only update player-related UI if the player exists and game is not over
             if (player != nullptr && player->isActive() && !gameOver) {
-                // Keep game state updated for UI elements
                 int health = player->getComponent<HealthComponent>().health;
                 std::stringstream healthSS;
                 healthSS << "Health: " << health;
@@ -1419,19 +1255,13 @@ void Game::update()
                 clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
             }
 
-            // Check if feedback timer has expired
             if (showFeedback) {
-                // For regular feedback from questions
                 if (!showingExitInstructions && (currentTime - feedbackStartTime > 1200)) {
                     closeQuestion();
                 } 
-                // For exit instructions, keep visible until player reaches exit
-                // Don't hide the "head north" message
             }
 
-            // If game is in question mode or game over, skip gameplay logic but continue animations
             if (questionActive || gameOver) {
-                // Ensure player doesn't move during questions if player exists
                 if (questionActive && player != nullptr && player->isActive() && 
                     player->hasComponent<TransformComponent>()) {
                     player->getComponent<TransformComponent>().velocity.x = 0;
@@ -1440,25 +1270,19 @@ void Game::update()
                 return;
             }
             
-            // Run manager update ONLY for STATE_GAME when not paused/game over
             manager.update();
             
-            // Continue with regular game update logic - only if player exists
             if (player != nullptr && player->isActive() && gameState == STATE_GAME) {
                 Vector2D playerPos = player->getComponent<TransformComponent>().position;
                 
-                // Get updated player position after manager.update()
                 TransformComponent& playerTransform = player->getComponent<TransformComponent>();
                 
-                // Define world boundaries
-                int worldWidth = 60 * 32 * 2;  // Assuming map size based on Map::LoadMap usage
+                int worldWidth = 60 * 32 * 2;
                 int worldHeight = 34 * 32 * 2;
                 
-                // Player dimensions
                 int playerWidth = playerTransform.width * playerTransform.scale;
                 int playerHeight = playerTransform.height * playerTransform.scale;
                 
-                // Clamp player position to world boundaries
                 if (playerTransform.position.x < 0) {
                     playerTransform.position.x = 0;
                 }
@@ -1472,13 +1296,11 @@ void Game::update()
                     playerTransform.position.y = worldHeight - playerHeight;
                 }
 
-                // Update player collider after potential position clamping
                 player->getComponent<ColliderComponent>().update();
                 SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
                 
                 damageTimer -= 1.0f/60.0f;
                 
-                // Update hurt sound timer
                 if (hurtSoundTimer > 0.0f) {
                     hurtSoundTimer -= 1.0f/60.0f;
                 }
@@ -1490,10 +1312,8 @@ void Game::update()
                     }
                 }
 
-                // Handle object collisions
                 if (objectCollisionsEnabled) {
                     for (auto& o : *objects) {
-                        // if (!o || !o->isActive()) continue; // Basic safety check - Keep? Seems reasonable.
                         if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
                                         o->getComponent<ColliderComponent>().collider)) {
                             if (o->getComponent<ColliderComponent>().tag == "clue") {
@@ -1513,64 +1333,49 @@ void Game::update()
                     }
                 }
 
-                // Player collision with terrain
                 for(auto& c : *colliders) {
                     SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
-                    SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider; // Get player collider AFTER movement
+                    SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
                     
                     if(Collision::AABB(cCol, updatedPlayerCol)) {
-                        // Calculate overlap
                         float overlapX = 0.0f;
                         float overlapY = 0.0f;
 
-                        // Calculate the distance between centers
                         float dx = (updatedPlayerCol.x + updatedPlayerCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
                         float dy = (updatedPlayerCol.y + updatedPlayerCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
 
-                        // Calculate the minimum non-overlapping distances
                         float combinedHalfWidths = (updatedPlayerCol.w / 2.0f) + (cCol.w / 2.0f);
                         float combinedHalfHeights = (updatedPlayerCol.h / 2.0f) + (cCol.h / 2.0f);
 
-                        // Calculate overlap on each axis
                         overlapX = combinedHalfWidths - std::abs(dx);
                         overlapY = combinedHalfHeights - std::abs(dy);
 
-                        // Resolve collision based on the axis with the smallest overlap
                         if (overlapX < overlapY) {
-                            // Push horizontally
-                            if (dx > 0) { // Player is to the right of collider
+                            if (dx > 0) {
                                 playerTransform.position.x += overlapX;
-                            } else { // Player is to the left of collider
+                            } else {
                                 playerTransform.position.x -= overlapX;
                             }
-                            // playerTransform.velocity.x = 0; // REMOVED: Allow input to control velocity
                         } else {
-                            // Push vertically
-                            if (dy > 0) { // Player is below collider
+                            if (dy > 0) {
                                 playerTransform.position.y += overlapY;
-                            } else { // Player is above collider
+                            } else {
                                 playerTransform.position.y -= overlapY;
                             }
-                            // playerTransform.velocity.y = 0; // REMOVED: Allow input to control velocity
                         }
 
-                        // Update player's collider component immediately after position change
                         player->getComponent<ColliderComponent>().update(); 
                     }
                 }
 
-                // Enemy collision with projectiles and player
                 for(auto& e : *enemies) {
-                    // Enemy needs access to its transform for collision response
                     TransformComponent& enemyTransform = e->getComponent<TransformComponent>();
 
-                    // --- Enemy Terrain Collision Check ---
                     for (auto& c : *colliders) {
                         SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
-                        SDL_Rect enemyCol = e->getComponent<ColliderComponent>().collider; // Get enemy collider AFTER its movement
+                        SDL_Rect enemyCol = e->getComponent<ColliderComponent>().collider;
 
                         if (Collision::AABB(cCol, enemyCol)) {
-                            // Calculate overlap (similar to player)
                             float overlapX = 0.0f;
                             float overlapY = 0.0f;
                             float dx = (enemyCol.x + enemyCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
@@ -1583,31 +1388,26 @@ void Game::update()
                             bool collidedHorizontally = false;
                             bool collidedVertically = false;
 
-                            // Resolve collision (Push enemy back)
                             if (overlapX < overlapY) {
                                 collidedHorizontally = true;
                                 if (dx > 0) enemyTransform.position.x += overlapX;
                                 else enemyTransform.position.x -= overlapX;
-                                enemyTransform.velocity.x = 0; // Stop horizontal movement *for this frame* 
+                                enemyTransform.velocity.x = 0;
                             } else {
                                 collidedVertically = true;
                                 if (dy > 0) enemyTransform.position.y += overlapY;
                                 else enemyTransform.position.y -= overlapY;
-                                enemyTransform.velocity.y = 0; // Stop vertical movement *for this frame*
+                                enemyTransform.velocity.y = 0;
                             }
                             
-                            // Notify AI component about the collision
                             if (e->hasComponent<EnemyAIComponent>()) {
                                 e->getComponent<EnemyAIComponent>().notifyTerrainCollision(collidedHorizontally, collidedVertically);
                             }
 
-                            // Update enemy's collider component immediately
                             e->getComponent<ColliderComponent>().update();
                         }
                     }
-                    // --- End Enemy Terrain Collision Check ---
 
-                    // Projectile collision
                     for(auto& p : *projectiles) {
                         if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
                                         p->getComponent<ColliderComponent>().collider)) {
@@ -1616,16 +1416,13 @@ void Game::update()
                         }
                     }
 
-                    // Player collision with damage cooldown
                     SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
                     if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
-                        // Boss deals more damage
                         if (currentLevel == 4 && e == finalBoss) {
-                            player->getComponent<HealthComponent>().takeDamage(10); // Boss deals more damage
+                            player->getComponent<HealthComponent>().takeDamage(10);
                         } else {
                             player->getComponent<HealthComponent>().takeDamage(5);
                         }
-                        // Play hurt sound when player takes damage (with cooldown check)
                         if (hurtSoundTimer <= 0.0f) {
                             assets->PlaySound("hurt", volumeLevel);
                             hurtSoundTimer = hurtSoundCooldown;
@@ -1633,13 +1430,10 @@ void Game::update()
                         damageTimer = damageCooldown;
                     }
                     
-                    // Destroy dead enemies
                     if(e->getComponent<HealthComponent>().health <= 0) {
-                        // Check if the enemy is the final boss
                         if (currentLevel == 4 && e == finalBoss) {
                             finalBossDefeated = true;
                             
-                            // Switch back to level3-4 music after boss is defeated
                             if (assets) {
                                 assets->StopMusic();
                                 assets->PlayMusic("level3-4", volumeLevel);
@@ -1647,48 +1441,32 @@ void Game::update()
                                 bossMusicPlaying = false;
                             }
                             
-                            // Show boss defeated message
                             feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the SUPERUM!", "font1", {255, 215, 0, 255});
                             
-                            // Position the feedback at the bottom of the screen
                             int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
                             int xPos = (1920 - feedbackWidth) / 2;
                             feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950);
                             
-                            // Show feedback
                             showFeedback = true;
                             feedbackStartTime = SDL_GetTicks();
-                            
-                            // Enable scientist rescue interaction
-                            canRescueScientist = true;
-                            
-                            // Change the map to reveal the exit
+                            canRescueScientist = true;   
                             level4MapChanged = true;
                             
-                            // First, destroy all collider entities to avoid stale colliders
                             for (auto c : *colliders) {
                                 c->destroy();
                             }
                             
-                            // Reload the map with the new file
                             if (map != nullptr) {
                                 delete map;
                                 map = nullptr;
                             }
                             
-                            // Keep the same texture but load the "after" map
                             std::string terrainTexture = "terrainlvl4";
                             std::string mapPath = "./assets/lvl4/Level4MapAfter.map";
                             
-                            // Create and load the new map
                             map = new Map(terrainTexture, 2, 32, manager);
-                            map->LoadMap(mapPath, 60, 34);  // Call directly without condition
-                            // If you need error handling:
-                            if (!map) {
-                                throw std::runtime_error("Failed to create map");
-                            }
+                            map->LoadMap(mapPath, 60, 34);
                             
-                            // Allow the manager to do a refresh to properly clean up destroyed entities
                             manager.refresh();
                         }
                         
@@ -1696,44 +1474,35 @@ void Game::update()
                     }
                 }
 
-                // Check if player is dead
                 if(player->getComponent<HealthComponent>().health <= 0) {
-                    // Destroy player
                     player->destroy();
                     
-                    // Reset all enemy animations to idle
                     for(auto& e : *enemies) {
                         if(e->hasComponent<SpriteComponent>()) {
                             e->getComponent<SpriteComponent>().Play("Idle");
                         }
                     }
                     
-                    // Mark game as over
                     gameOver = true;
                     playerWon = false;
                     
-                    // Show end screen with defeat
                     initEndScreen(false);
                     return;
                 }
 
-                // Center camera on player
                 camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
                 camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
 
-                // Camera bounds
                 if(camera.x < 0) camera.x = 0;
                 if(camera.y < 0) camera.y = 0;
                 if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
                 if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
                 
-                // Check for boss encounter in level 4
                 if (currentLevel == 4 && !finalBossDefeated && finalBoss != nullptr && player != nullptr) {
                     Vector2D playerPos = player->getComponent<TransformComponent>().position;
                     Vector2D bossPos = finalBoss->getComponent<TransformComponent>().position;
                     float distance = sqrt(pow(playerPos.x - bossPos.x, 2) + pow(playerPos.y - bossPos.y, 2));
                     
-                    // If close enough to the boss, play boss music
                     if (distance <= 500 && assets && !bossMusicPlaying) {
                         finalBoss->getComponent<EnemyAIComponent>().setChaseRange(800.0f);
                         assets->StopMusic();
@@ -1743,61 +1512,47 @@ void Game::update()
                     }
                 }
                 
-                // Check win condition
                 if ((currentLevel != 4 && collectedClues >= totalClues) || 
                     (currentLevel == 4 && finalBossDefeated)) {
-                    // All clues collected or boss defeated, but still require player to go north/exit
                     if (!showingExitInstructions) {
-                        // Show instructions to player only once
                         if (currentLevel == 3) {
                             feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Enter the pyramid to see what lies ahead.", "font1", {255, 215, 0, 255});
                         } else if (currentLevel == 4 && level4MapChanged) {
-                            // Boss already defeated, path revealed message shown previously
-                            // Just enable exit instructions mode
                             showingExitInstructions = true;
                         } else {
                             feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
                         }
                         
-                        // Position the feedback at the bottom of the screen
                         int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
                         int xPos = (1920 - feedbackWidth) / 2;
-                        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
+                        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950);
                         
-                        // Show feedback
                         showFeedback = true;
                         feedbackStartTime = SDL_GetTicks();
                         showingExitInstructions = true;
                     }
                     
-                    // Check win condition based on level
                     if (currentLevel == 3) {
-                        // For level 3, check if player has entered the pyramid at tiles 20 and 21 (x=25,y=20 and x=26,y=20)
                         float playerX = player->getComponent<TransformComponent>().position.x / 64;
                         float playerY = player->getComponent<TransformComponent>().position.y / 64;
                         
-                        // Check if player is at the pyramid entrance - use a more generous collision box
-                        
-                        // Also check for collision between player and a broader pyramid entrance area
                         SDL_Rect playerCollider = player->getComponent<ColliderComponent>().collider;
                         SDL_Rect pyramidEntrance = {
                             24 * 64, // x
                             19 * 64, // y
-                            3 * 64,  // width (3 tiles wide)
-                            1 * 64   // height (1 tile tall) - shorter from the bottom
+                            3 * 64,  // width
+                            1 * 64   // height
                         };
                         
-                        // Adjust for camera position since player collider is in screen space
                         pyramidEntrance.x -= camera.x;
                         pyramidEntrance.y -= camera.y;
                         
                         if (Collision::AABB(playerCollider, pyramidEntrance) || 
                             ((playerX >= 23 && playerX <= 27) && (playerY >= 18 && playerY <= 20))) {
-                            // Player has reached the pyramid, proceed to next level
                             advanceToNextLevel();
                         }
-                    } else {
-                        // For other levels, check if player has gone far enough north
+                    } 
+                    else {
                         if (player->getComponent<TransformComponent>().position.y < 100) {
                                 advanceToNextLevel();
                         }
@@ -1805,44 +1560,34 @@ void Game::update()
                 }
             }
             break;
-            
     }
 
-    // Handle feedback message timeout (moved outside game state switch for consistency)
     if (showFeedback && feedbackLabel && feedbackLabel->hasComponent<UILabel>()) {
-        // Check if we're showing level completion instructions
         bool isExitInstructions = 
             showingExitInstructions && 
             ((currentLevel != 4 && collectedClues >= totalClues) || 
             (currentLevel == 4 && finalBossDefeated));
             
-        // Check if we need to restore exit instructions after temporary save notification
         if (hasSavedDuringExitInstructions && currentTime - feedbackStartTime >= feedbackDuration) {
-            // Restore the original exit instructions text
             feedbackLabel->getComponent<UILabel>().SetLabelText(savedExitInstructionsText, "font1", {255, 215, 0, 255});
             int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
             int xPos = (1920 - feedbackWidth) / 2;
             feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
             
-            // Reset the saved during exit flag, but keep showFeedback and showingExitInstructions true
             hasSavedDuringExitInstructions = false;
             
-            // Reset feedbackStartTime to avoid immediate hiding after restoration
             feedbackStartTime = currentTime;
         }
-        // Only hide feedback if it's not exit instructions and not during restoration
         else if (!isExitInstructions && !hasSavedDuringExitInstructions) {
             if (currentTime - feedbackStartTime >= feedbackDuration) {
                 showFeedback = false;
                 feedbackLabel->getComponent<UILabel>().SetLabelText("", "font1", white);
             }
         }
-        // Exit instructions will remain visible until player advances to next level
     }
 }
 
 void Game::render() {
-    // Render based on current game state
     switch (gameState) {
         case STATE_MAIN_MENU:
             renderMainMenu();
@@ -1877,12 +1622,10 @@ void Game::render() {
                 return;
             }
             
-            // Draw map tiles
             for (auto& m : manager.getGroup(groupMap)) {
                 m->draw();
             }
             
-            // Draw entities categorized by group
             for (auto& c : manager.getGroup(groupColliders)) {
                 c->draw();
             }
@@ -1902,95 +1645,76 @@ void Game::render() {
                 e->draw();
             }
             
-            // Draw UI items (labels, buttons, etc.)
             for (auto& ui : manager.getGroup(groupUI)) {
                 ui->draw();
             }
             
-            // Render question UI on top if active
             if (questionActive) {
-                // Create a semi-transparent background for the question
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200); // Semi-transparent black
-                SDL_Rect questionBg = {1920/6, 250, 1920*2/3, 350}; // Wider and taller background
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
+                SDL_Rect questionBg = {1920/6, 250, 1920*2/3, 350};
                 SDL_RenderFillRect(renderer, &questionBg);
                 
-                // Draw question elements
                 questionLabel->draw();
                 answer1Label->draw();
                 answer2Label->draw();
                 answer3Label->draw();
                 answer4Label->draw();
                 
-                // Reset draw color and blend mode
                 SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
             }
             
-            // Draw feedback if active (for both question feedback and exit instructions)
             if (showFeedback && feedbackLabel != nullptr) {
-                // Check if it's a save game notification
                 bool isSaveNotification = 
                     feedbackLabel->hasComponent<UILabel>() && 
                     feedbackLabel->getComponent<UILabel>().GetWidth() > 0 &&
-                    feedbackLabel->getComponent<UILabel>().GetPosition().y == 950 && // Position check (bottom of screen)
-                    !showingExitInstructions; // Not exit instructions
+                    feedbackLabel->getComponent<UILabel>().GetPosition().y == 950 &&
+                    !showingExitInstructions;
                     
-                // Create special background for feedback only for regular feedback (questions), 
-                // not exit instructions or save notification
                 if (!showingExitInstructions && !isSaveNotification) {
                     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230);
                     SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
                     SDL_RenderFillRect(renderer, &feedbackBg);
                 }
                 
-                // Draw the feedback text
                 feedbackLabel->draw();
                 
-                // Reset draw color and blend mode
                 SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
             }
             
-            // Show interaction prompt for scientist if player is close
             if (currentLevel == 4 && canRescueScientist && !scientistRescued && 
                 player != nullptr && scientist != nullptr) {
                 Vector2D playerPos = player->getComponent<TransformComponent>().position;
                 Vector2D scientistPos = scientist->getComponent<TransformComponent>().position;
                 float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
                 
-                if (distance <= 100) { // Within interaction range
-                    // Draw interaction prompt with lower opacity background
+                if (distance <= 100) {
                     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120); // Reduced opacity (120 instead of 200)
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120);
                     
-                    // Calculate prompt position (centered above scientist)
-                    int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + (32 * 3) / 2; // Center on sprite (32px width * 3 scale)
-                    int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 50; // Moved up a bit more
+                    int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + (32 * 3) / 2;
+                    int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 50;
                     
-                    // Create a wider background rect for prompt
-                    SDL_Rect promptRect = {promptX - 75, promptY - 15, 150, 35}; // Wider by 30px (15px on each side)
+                    SDL_Rect promptRect = {promptX - 75, promptY - 15, 150, 35};
                     SDL_RenderFillRect(renderer, &promptRect);
                     
-                    // Add a subtle border to the prompt
-                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 80); // Very transparent white
-                    SDL_RenderDrawRect(renderer, &promptRect); // Just the outline
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 80);
+                    SDL_RenderDrawRect(renderer, &promptRect);
                     
-                    // Set up temporary label for "Press E"
                     static Entity* promptLabel = nullptr;
                     if (promptLabel == nullptr) {
                         promptLabel = &manager.addEntity();
-                        SDL_Color dimWhite = {220, 220, 220, 255}; // Slightly dimmer text
+                        SDL_Color dimWhite = {220, 220, 220, 255};
                         promptLabel->addComponent<UILabel>(0, 0, "Press E", "font1", dimWhite);
                     }
                     
-                    // Position the prompt
                     int labelWidth = promptLabel->getComponent<UILabel>().GetWidth();
                     promptLabel->getComponent<UILabel>().SetPosition(promptX - labelWidth/2, promptY - 10);
                     promptLabel->draw();
                     
-                    // Reset draw color and blend mode
                     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
                     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
                 }
@@ -2015,52 +1739,43 @@ void Game::clean()
 }
 
 void Game::restart() {
-    // Reset game state variables
     gameOver = false;
     playerWon = false;
     collectedClues = 0;
     damageTimer = 1.0f;
-    hurtSoundTimer = 0.0f; // Reset hurt sound timer
+    hurtSoundTimer = 0.0f;
     objectCollisionDelay = 1.0f;
     objectCollisionsEnabled = false;
     questionActive = false;
     pendingClueEntity = nullptr;
     showFeedback = false;
-    showingExitInstructions = false; // Reset exit instructions flag
-    level4MapChanged = false; // Reset level 4 map state
-    finalBossDefeated = false; // Reset final boss state
-    bossMusicPlaying = false; // Reset boss music state
-    scientistRescued = false; // Reset scientist state
-    canRescueScientist = false; // Reset scientist interaction flag
+    showingExitInstructions = false;
+    level4MapChanged = false;
+    finalBossDefeated = false;
+    bossMusicPlaying = false;
+    scientistRescued = false;
+    canRescueScientist = false;
     currentLevel = 1;
-    gameState = STATE_GAME; // Ensure we're in game state
+    gameState = STATE_GAME;
     
-    // Reset used questions when restarting the game
     resetUsedQuestions();
     
-    // Set clue count correctly for level 1
-    totalClues = 3; // Reset to default value, loadLevel will adjust if needed
+    totalClues = 3;
     
-    // Reset position tracking
     positionManager.resetPositions();
     
-    // Clear all entities including UI
     manager.clear();
     
-    // Make sure map is properly deallocated
     if (map != nullptr) {
         delete map;
         map = nullptr;
     }
     
-    // Reset gameplay timer
     gameStartTime = SDL_GetTicks();
     gameplayTime = 0;
     
-    // Load first level
     loadLevel(currentLevel);
     
-    // Reinitialize all game entities
     initEntities();
 }
 
@@ -2068,34 +1783,27 @@ void Game::showQuestion(Entity* clueEntity) {
     if (questionActive) return;
     
     questionActive = true;
-    answerSubmitted = false; // Reset submission status for new question
+    answerSubmitted = false;
     pendingClueEntity = clueEntity;
     
-    // Set player to idle animation when entering question mode
     if (player != nullptr && player->isActive()) {
         player->getComponent<SpriteComponent>().Play("Idle");
         
-        // Disable keyboard controls during question mode
         if (player->hasComponent<KeyboardController>()) {
             player->getComponent<KeyboardController>().enabled = false;
         }
     }
     
-    // Set all enemies to idle animation
     for(auto& e : *enemies) {
         e->getComponent<SpriteComponent>().Play("Idle");
     }
     
-    // Check if we've used all questions
     if (usedQuestions.size() >= questions.size()) {
-        // All questions have been used, reset the set to allow reuse
         usedQuestions.clear();
     }
     
-    // Use proper seeded random for question selection
     static std::mt19937 rng(std::time(nullptr));
     
-    // Select only from unused questions
     std::vector<int> availableQuestions;
     for (size_t i = 0; i < questions.size(); i++) {
         if (usedQuestions.find(i) == usedQuestions.end()) {
@@ -2103,35 +1811,28 @@ void Game::showQuestion(Entity* clueEntity) {
         }
     }
     
-    // Select a random question from available ones
     int randomIndex = rng() % availableQuestions.size();
     currentQuestion = availableQuestions[randomIndex];
     
-    // Mark this question as used
     usedQuestions.insert(currentQuestion);
     
     Question q = questions[currentQuestion];
     
-    // Make the question more visible with better formatting
-    SDL_Color questionColor = {255, 255, 0, 255}; // Yellow for questions
-    SDL_Color answerColor = {255, 255, 255, 255}; // White for answers
+    SDL_Color questionColor = {255, 255, 0, 255};
+    SDL_Color answerColor = {255, 255, 255, 255};
     
-    // Format the question and answers for better visibility
     questionLabel->getComponent<UILabel>().SetLabelText(q.question, "font1", questionColor);
     answer1Label->getComponent<UILabel>().SetLabelText("1: " + q.answers[0], "font1", answerColor);
     answer2Label->getComponent<UILabel>().SetLabelText("2: " + q.answers[1], "font1", answerColor);
     answer3Label->getComponent<UILabel>().SetLabelText("3: " + q.answers[2], "font1", answerColor);
     answer4Label->getComponent<UILabel>().SetLabelText("4: " + q.answers[3], "font1", answerColor);
     
-    // Center the question text horizontally
     int questionWidth = questionLabel->getComponent<UILabel>().GetWidth();
     int xPos = (1920 - questionWidth) / 2;
     
-    // Position all question elements centered on screen
     questionLabel->getComponent<UILabel>().SetPosition(xPos, 300);
     
-    // Align answers below the question
-    int xPosAnswers = 1920 / 3; // Move answers a bit to the left
+    int xPosAnswers = 1920 / 3;
     answer1Label->getComponent<UILabel>().SetPosition(xPosAnswers, 360);
     answer2Label->getComponent<UILabel>().SetPosition(xPosAnswers, 410);
     answer3Label->getComponent<UILabel>().SetPosition(xPosAnswers, 460);
@@ -2141,7 +1842,6 @@ void Game::showQuestion(Entity* clueEntity) {
 void Game::checkAnswer(int selectedAnswer) {
     if (!questionActive || answerSubmitted) return;
     
-    // Mark that an answer has been submitted to prevent multiple attempts
     answerSubmitted = true;
     
     isAnswerCorrect = (selectedAnswer == questions[currentQuestion].correctAnswer);
@@ -2150,31 +1850,26 @@ void Game::checkAnswer(int selectedAnswer) {
         collectedClues++;
         pendingClueEntity->destroy();
         feedbackLabel->getComponent<UILabel>().SetLabelText("CORRECT!", "font2", green);
-        // Play correct answer sound
         assets->PlaySound("correctanswer", volumeLevel);
     } else {
         feedbackLabel->getComponent<UILabel>().SetLabelText("INCORRECT!", "font2", red);
-        // Play wrong answer sound
         assets->PlaySound("wronganswer", volumeLevel);
     }
     
-    // Position the feedback centered horizontally and lower on the screen
     int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
     int xPos = (1920 - feedbackWidth) / 2;
     feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 650);
     
-    // Show feedback for a short time
     showFeedback = true;
     feedbackStartTime = SDL_GetTicks();
 }
 
 void Game::closeQuestion() {
     questionActive = false;
-    answerSubmitted = false; // Reset for next question
+    answerSubmitted = false;
     pendingClueEntity = nullptr;
     showFeedback = false;
     
-    // Re-enable keyboard controls if player exists
     if (player != nullptr && player->isActive() && player->hasComponent<KeyboardController>()) {
         player->getComponent<KeyboardController>().enabled = true;
     }
@@ -2188,23 +1883,18 @@ void Game::closeQuestion() {
 }
 
 void Game::loadLevel(int levelNum) {
-    // Make sure to clean up the previous map
     if (map != nullptr) {
         delete map;
         map = nullptr;
     }
     
-    // Set level-specific properties
     currentLevel = levelNum;
     collectedClues = 0;
-    showingExitInstructions = false; // Reset exit instructions flag for new level
+    showingExitInstructions = false;
     
-    // Play appropriate level music
     if (assets) {
-        // First stop any current music
         assets->StopMusic();
         
-        // Play music based on current level
         switch (currentLevel) {
             case 1:
                 assets->PlayMusic("level1", volumeLevel);
@@ -2216,9 +1906,7 @@ void Game::loadLevel(int levelNum) {
                 break;
             case 3:
             case 4:
-                // Level 3 and 4 share the same music until the boss is encountered
                 if (currentLevel == 4 && finalBossDefeated) {
-                    // If the boss was already defeated, no specific music needed
                     assets->PlayMusic("level3-4", volumeLevel);
                     currentMusic = "level3-4";
                 } else {
@@ -2227,14 +1915,12 @@ void Game::loadLevel(int levelNum) {
                 }
                 break;
             default:
-                // Default music
                 assets->PlayMusic("level1", volumeLevel);
                 currentMusic = "level1";
                 break;
         }
     }
     
-    // Set level-specific quantities
     if (currentLevel == 1) {
         totalClues = 3;
         totalMagazines = 3;
@@ -2248,15 +1934,14 @@ void Game::loadLevel(int levelNum) {
         totalMagazines = 15;  
         totalHealthPotions = 15;
     } else if (currentLevel == 4) {
-        totalClues = 0; // No clues in level 4, boss battle instead
+        totalClues = 0;
         totalMagazines = 7;
         totalHealthPotions = 9;
-        level4MapChanged = false; // Reset the map change flag for level 4
-        finalBossDefeated = false; // Reset the boss defeated flag
-        bossMusicPlaying = false; // Reset the boss music flag
+        level4MapChanged = false;
+        finalBossDefeated = false;
+        bossMusicPlaying = false;
     }
     
-    // Create appropriate map based on level number
     std::string terrainTexture = "terrainlvl" + std::to_string(levelNum);
     std::string mapPath;
     
@@ -2266,48 +1951,36 @@ void Game::loadLevel(int levelNum) {
         mapPath = "./assets/lvl" + std::to_string(levelNum) + "/Level" + std::to_string(levelNum) + "Map.map";
     }
     
-    // Ensure texture is loaded
     if (Game::assets->GetTexture(terrainTexture) == nullptr) {
         return;
     }
     
-    // Create the map
     map = new Map(terrainTexture, 2, 32, manager);
     
-    // Load the map data
     map->LoadMap(mapPath, 60, 34);
 }
 
 void Game::advanceToNextLevel() {
-    // Ensure we're in GAME state when starting a transition
     gameState = STATE_GAME;
     
-    // Play level transition sound
     assets->PlaySound("levelTransition", volumeLevel);
     
-    // Start transition sequence using the transition manager
     transitionManager.startTransition(currentLevel, currentLevel + 1);
     
-    // Make sure the transition label is properly initialized
     if (transitionLabel == nullptr) {
         transitionLabel = &manager.addEntity();
         transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
     }
     
-    // Continue recording positions in the next level
-    // Reset last recorded position for the next level
     lastRecordedPosition = Vector2D(0, 0);
 }
 
 void Game::initMainMenu() {
-    // Reset selection and hover states
-    selectedMenuItem = MENU_NEW_GAME; // Default selection
+    selectedMenuItem = MENU_NEW_GAME;
     menuItemSelected = false;
-    menuHighlightActive = false; // Start with no highlights
+    menuHighlightActive = false;
     
-    // Play main menu music
     if (assets) {
-        // Only change music if we're not already playing the main menu music
         if (currentMusic != "mainmenu") {
             assets->StopMusic();
             assets->PlayMusic("mainmenu", volumeLevel);
@@ -2315,47 +1988,42 @@ void Game::initMainMenu() {
         }
     }
     
-    // Create menu entity objects
     menuTitle = &manager.addEntity();
     menuNewGameButton = &manager.addEntity();
     menuLoadGameButton = &manager.addEntity();
-    menuSettingsButton = &manager.addEntity();  // Add settings button
-    menuLeaderboardButton = &manager.addEntity();  // Add leaderboard button
+    menuSettingsButton = &manager.addEntity();
+    menuLeaderboardButton = &manager.addEntity();
     menuExitButton = &manager.addEntity();
     
-    // Set up UI components
     menuTitle->addComponent<UILabel>(0, 200, "Dejte mi RPA 3 prosm", "font2", white);
     
-    // Increased spacing between menu buttons
     menuNewGameButton->addComponent<UILabel>(0, 400, "NEW GAME", "font1", white);
-    menuLoadGameButton->addComponent<UILabel>(0, 470, "LOAD GAME", "font1", white);  // From 450 to 470
-    menuSettingsButton->addComponent<UILabel>(0, 540, "SETTINGS", "font1", white);   // From 500 to 540
-    menuLeaderboardButton->addComponent<UILabel>(0, 610, "LEADERBOARD", "font1", white); // From 550 to 610
-    menuExitButton->addComponent<UILabel>(0, 680, "EXIT", "font1", white);  // From 600 to 680
+    menuLoadGameButton->addComponent<UILabel>(0, 470, "LOAD GAME", "font1", white);
+    menuSettingsButton->addComponent<UILabel>(0, 540, "SETTINGS", "font1", white);
+    menuLeaderboardButton->addComponent<UILabel>(0, 610, "LEADERBOARD", "font1", white);
+    menuExitButton->addComponent<UILabel>(0, 680, "EXIT", "font1", white);
     
-    // Center the menu items horizontally
     int titleWidth = menuTitle->getComponent<UILabel>().GetWidth();
     int newGameWidth = menuNewGameButton->getComponent<UILabel>().GetWidth();
     int loadGameWidth = menuLoadGameButton->getComponent<UILabel>().GetWidth();
-    int settingsWidth = menuSettingsButton->getComponent<UILabel>().GetWidth();  // Get settings width
-    int leaderboardWidth = menuLeaderboardButton->getComponent<UILabel>().GetWidth();  // Get leaderboard width
+    int settingsWidth = menuSettingsButton->getComponent<UILabel>().GetWidth();
+    int leaderboardWidth = menuLeaderboardButton->getComponent<UILabel>().GetWidth();
     int exitWidth = menuExitButton->getComponent<UILabel>().GetWidth();
     
     int titleX = (1920 - titleWidth) / 2;
     int newGameX = (1920 - newGameWidth) / 2;
     int loadGameX = (1920 - loadGameWidth) / 2;
-    int settingsX = (1920 - settingsWidth) / 2;  // Calculate settings position
-    int leaderboardX = (1920 - leaderboardWidth) / 2;  // Calculate leaderboard position
+    int settingsX = (1920 - settingsWidth) / 2;
+    int leaderboardX = (1920 - leaderboardWidth) / 2;
     int exitX = (1920 - exitWidth) / 2;
     
     menuTitle->getComponent<UILabel>().SetPosition(titleX, 200);
     menuNewGameButton->getComponent<UILabel>().SetPosition(newGameX, 400);
-    menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 470);  // From 450 to 470
-    menuSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 540);  // From 500 to 540
-    menuLeaderboardButton->getComponent<UILabel>().SetPosition(leaderboardX, 610);  // From 550 to 610
-    menuExitButton->getComponent<UILabel>().SetPosition(exitX, 680);  // From 600 to 680
+    menuLoadGameButton->getComponent<UILabel>().SetPosition(loadGameX, 470);
+    menuSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 540);
+    menuLeaderboardButton->getComponent<UILabel>().SetPosition(leaderboardX, 610);
+    menuExitButton->getComponent<UILabel>().SetPosition(exitX, 680);
     
-    // Make menu items clickable but ensure they're not hovered initially
     menuNewGameButton->getComponent<UILabel>().SetClickable(true);
     menuNewGameButton->getComponent<UILabel>().SetOnClick([this]() { startGame(); });
     menuNewGameButton->getComponent<UILabel>().SetHoverColor(yellow);
@@ -2366,17 +2034,15 @@ void Game::initMainMenu() {
     menuLoadGameButton->getComponent<UILabel>().SetHoverColor(yellow);
     menuLoadGameButton->getComponent<UILabel>().ResetHoverState();
     
-    // Add settings button functionality
     menuSettingsButton->getComponent<UILabel>().SetClickable(true);
     menuSettingsButton->getComponent<UILabel>().SetOnClick([this]() { 
-        previousState = STATE_MAIN_MENU; // Store that we came from main menu
+        previousState = STATE_MAIN_MENU;
         gameState = STATE_SETTINGS;
         initSettingsMenu();
     });
     menuSettingsButton->getComponent<UILabel>().SetHoverColor(yellow);
     menuSettingsButton->getComponent<UILabel>().ResetHoverState();
     
-    // Add leaderboard button functionality
     menuLeaderboardButton->getComponent<UILabel>().SetClickable(true);
     menuLeaderboardButton->getComponent<UILabel>().SetOnClick([this]() { 
         gameState = STATE_LEADERBOARD;
@@ -2389,12 +2055,9 @@ void Game::initMainMenu() {
     menuExitButton->getComponent<UILabel>().SetOnClick([this]() { isRunning = false; });
     menuExitButton->getComponent<UILabel>().SetHoverColor(yellow);
     menuExitButton->getComponent<UILabel>().ResetHoverState();
-    
-    // No need to call updateMainMenu() since menuHighlightActive is false
 }
 
 void Game::updateMainMenu() {
-    // Reset all menu items to default state
     if (menuNewGameButton && menuNewGameButton->hasComponent<UILabel>()) {
         menuNewGameButton->getComponent<UILabel>().ResetHoverState();
     }
@@ -2415,7 +2078,6 @@ void Game::updateMainMenu() {
         menuExitButton->getComponent<UILabel>().ResetHoverState();
     }
     
-    // Only highlight the selected item if highlight is active
     if (menuHighlightActive) {
         switch (selectedMenuItem) {
             case MENU_NEW_GAME:
@@ -2450,22 +2112,20 @@ void Game::updateMainMenu() {
 }
 
 void Game::renderMainMenu() {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black background
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     
-    // Draw menu elements
     menuTitle->draw();
     menuNewGameButton->draw();
     menuLoadGameButton->draw();
-    menuSettingsButton->draw();    // Draw settings button
-    menuLeaderboardButton->draw(); // Draw leaderboard button
+    menuSettingsButton->draw();
+    menuLeaderboardButton->draw();
     menuExitButton->draw();
     
     SDL_RenderPresent(renderer);
 }
 
 void Game::startGame() {
-    // Ask for player name before starting the game
     promptPlayerName();
 }
 
@@ -2473,8 +2133,6 @@ void Game::loadGame() {
     std::ifstream saveFile("assets/savegame.bin", std::ios::binary);
     if (!saveFile.is_open()) {
         std::cout << "No save file found or could not open. Starting new game." << std::endl;
-        // Start a new game but don't prompt for player name
-        // Reset key variables
         gameOver = false;
         playerWon = false;
         questionActive = false;
@@ -2487,18 +2145,15 @@ void Game::loadGame() {
         canRescueScientist = false;
         usedQuestions.clear();
         
-        // Set default player name if empty
         if (playerName.empty()) {
             playerName = "Player";
         }
         
-        // Continue with game setup
         gameState = STATE_GAME;
         loadLevel(currentLevel);
         initEntities();
         gameStartTime = SDL_GetTicks();
         
-        // Play level 1 music
         if (assets) {
             assets->StopMusic();
             assets->PlayMusic("level1", volumeLevel);
@@ -2508,17 +2163,14 @@ void Game::loadGame() {
         return;
     }
     
-    // Make sure assets manager exists before loading
     if (!assets) {
         std::cerr << "Assets manager is null. Cannot load game." << std::endl;
-        // Handle error but don't prompt for name
         gameState = STATE_MAIN_MENU;
         initMainMenu();
         return;
     }
 
     try {
-        // --- Read Data ---
         float playerX, playerY;
         int playerHealth, playerCurrentAmmo, playerMaxAmmo;
         int loadedClues, loadedLevel;
@@ -2530,7 +2182,6 @@ void Game::loadGame() {
 
         bool loadSuccess = true;
 
-        // Player Data
         saveFile.read(reinterpret_cast<char*>(&playerX), sizeof(playerX));
         saveFile.read(reinterpret_cast<char*>(&playerY), sizeof(playerY));
         saveFile.read(reinterpret_cast<char*>(&playerHealth), sizeof(playerHealth));
@@ -2538,7 +2189,6 @@ void Game::loadGame() {
         saveFile.read(reinterpret_cast<char*>(&playerMaxAmmo), sizeof(playerMaxAmmo));
         loadSuccess &= saveFile.good();
 
-        // Load player name
         std::string loadedPlayerName;
         if (readString(saveFile, loadedPlayerName)) {
             playerName = loadedPlayerName;
@@ -2546,7 +2196,6 @@ void Game::loadGame() {
             loadSuccess = false;
         }
 
-        // Game State
         saveFile.read(reinterpret_cast<char*>(&loadedClues), sizeof(loadedClues));
         saveFile.read(reinterpret_cast<char*>(&loadedLevel), sizeof(loadedLevel));
         saveFile.read(reinterpret_cast<char*>(&loadedGameplayTime), sizeof(loadedGameplayTime));
@@ -2556,19 +2205,16 @@ void Game::loadGame() {
         saveFile.read(reinterpret_cast<char*>(&loadedCanRescueScientist), sizeof(loadedCanRescueScientist));
         loadSuccess &= saveFile.good();
 
-        // Validate loaded level
         if (loadedLevel < 1 || loadedLevel > maxLevels) {
             std::cerr << "Invalid level in save file: " << loadedLevel << std::endl;
             loadSuccess = false;
         }
 
-        // Used Questions
         size_t numUsedQuestions;
         saveFile.read(reinterpret_cast<char*>(&numUsedQuestions), sizeof(numUsedQuestions));
         loadSuccess &= saveFile.good();
         
-        // Validate question count to prevent buffer overflows
-        if (numUsedQuestions > 100) { // Reasonable upper limit for questions
+        if (numUsedQuestions > 100) {
             std::cerr << "Too many used questions in save: " << numUsedQuestions << std::endl;
             loadSuccess = false;
         }
@@ -2581,13 +2227,11 @@ void Game::loadGame() {
             }
         }
 
-        // Enemy Data
         size_t numEnemies;
         saveFile.read(reinterpret_cast<char*>(&numEnemies), sizeof(numEnemies));
         loadSuccess &= saveFile.good();
         
-        // Validate enemy count to prevent excessive memory allocation
-        if (numEnemies > 100) { // Reasonable upper limit for enemies
+        if (numEnemies > 100) {
             std::cerr << "Too many enemies in save: " << numEnemies << std::endl;
             loadSuccess = false;
         }
@@ -2603,13 +2247,11 @@ void Game::loadGame() {
             }
         }
 
-        // Object Data
         size_t numObjects;
         saveFile.read(reinterpret_cast<char*>(&numObjects), sizeof(numObjects));
         loadSuccess &= saveFile.good();
         
-        // Validate object count to prevent excessive memory allocation
-        if (numObjects > 100) { // Reasonable upper limit for objects
+        if (numObjects > 100) {
             std::cerr << "Too many objects in save: " << numObjects << std::endl;
             loadSuccess = false;
         }
@@ -2630,25 +2272,20 @@ void Game::loadGame() {
 
         if (!loadSuccess) {
             std::cerr << "Save file corrupted or incomplete. Starting new game." << std::endl;
-            // Handle error but don't prompt for player name
             gameState = STATE_MAIN_MENU;
             initMainMenu();
             return;
         }
 
-        // --- Reconstruct State ---
         std::cout << "Load game successful. Reconstructing state..." << std::endl;
 
-        // Clear all existing entities first to avoid memory issues
         manager.clear();
         
-        // Delete map if it exists
         if (map != nullptr) {
             delete map;
             map = nullptr;
         }
 
-        // 1. Reset Core Game State Variables
         gameOver = false;
         playerWon = false;
         questionActive = false;
@@ -2659,24 +2296,20 @@ void Game::loadGame() {
         objectCollisionDelay = 1.0f;
         objectCollisionsEnabled = false;
 
-        // 2. Clear Menu Entities and Pointers
         menuTitle = nullptr; menuNewGameButton = nullptr; menuLoadGameButton = nullptr;
         menuSettingsButton = nullptr; menuLeaderboardButton = nullptr; menuExitButton = nullptr;
         endTitle = nullptr; endMessage = nullptr; endRestartButton = nullptr;
         endReplayButton = nullptr; endMenuButton = nullptr;
         pauseTitle = nullptr; pauseResumeButton = nullptr; pauseSaveButton = nullptr;
         pauseRestartButton = nullptr; pauseSettingsButton = nullptr; pauseMainMenuButton = nullptr;
-        settingsTitle = nullptr; volumeSlider = nullptr; volumeLabel = nullptr;
-        keybindsLabel = nullptr; settingsBackButton = nullptr;
+        settingsTitle = nullptr; volumeLabel = nullptr; keybindsLabel = nullptr; settingsBackButton = nullptr;
 
-        // Reset core entity pointers
         player = nullptr; finalBoss = nullptr; healthbar = nullptr; ammobar = nullptr;
         gameover = nullptr; clueCounter = nullptr; feedbackLabel = nullptr; scientist = nullptr;
         questionLabel = nullptr; answer1Label = nullptr; answer2Label = nullptr;
         answer3Label = nullptr; answer4Label = nullptr; questionBackground = nullptr;
         timerLabel = nullptr; transitionLabel = nullptr;
 
-        // 4. Apply Loaded State Variables
         currentLevel = loadedLevel;
         collectedClues = loadedClues;
         gameplayTime = loadedGameplayTime;
@@ -2685,27 +2318,22 @@ void Game::loadGame() {
         scientistRescued = loadedScientistRescued;
         canRescueScientist = loadedCanRescueScientist;
 
-        // Restore used questions set
         usedQuestions.clear();
         for (int index : loadedUsedQuestions) {
             usedQuestions.insert(index);
         }
 
-        // Set timer correctly
         gameStartTime = SDL_GetTicks() - gameplayTime;
 
-        // Set level-specific total counts (important for UI)
         if (currentLevel == 1) { totalClues = 3; totalMagazines = 3; totalHealthPotions = 2; }
         else if (currentLevel == 2) { totalClues = 5; totalMagazines = 9; totalHealthPotions = 9; }
         else if (currentLevel == 3) { totalClues = 7; totalMagazines = 15; totalHealthPotions = 15; }
         else if (currentLevel == 4) { totalClues = 0; totalMagazines = 7; totalHealthPotions = 9; }
         else {
-            // Fallback to level 1 if something went wrong
             currentLevel = 1;
             totalClues = 3; totalMagazines = 3; totalHealthPotions = 2;
         }
 
-        // 5. Load Map (Handle level 4 state)
         std::string terrainTexture = "terrainlvl" + std::to_string(currentLevel);
         std::string mapPath;
         if (currentLevel == 4 && level4MapChanged) {
@@ -2714,17 +2342,15 @@ void Game::loadGame() {
             mapPath = "./assets/lvl" + std::to_string(currentLevel) + "/Level" + std::to_string(currentLevel) + "Map.map";
         }
 
-        // Ensure texture is loaded
         if (assets->GetTexture(terrainTexture) == nullptr) {
             std::cerr << "Error: Failed to find texture " << terrainTexture << " for loaded level. Starting new game." << std::endl;
             startGame();
             return;
         }
 
-        // Create map safely
         try {
             map = new Map(terrainTexture, 2, 32, manager);
-            map->LoadMap(mapPath, 60, 34); // Call directly
+            map->LoadMap(mapPath, 60, 34);
         }
         catch (const std::exception& e) {
             std::cerr << "Map loading error: " << e.what() << std::endl;
@@ -2732,15 +2358,12 @@ void Game::loadGame() {
             return;
         }
 
-        // 6. Create Transition Label first (needed for transition manager)
         transitionLabel = &manager.addEntity();
         transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
 
-        // Initialize transition manager (needed for level transitions)
         transitionManager.init(this, &manager);
         transitionManager.mTransitionLabel = transitionLabel;
 
-        // 7. Create all UI entities
         try {
             healthbar = &manager.addEntity();
             ammobar = &manager.addEntity();
@@ -2761,7 +2384,6 @@ void Game::loadGame() {
             gameover->addComponent<UILabel>(0, 0, "", "font2", white);
             feedbackLabel->addComponent<UILabel>(0, 650, "", "font2", white);
 
-            // Initialize timer label
             Uint32 totalSeconds = gameplayTime / 1000;
             Uint32 minutes = totalSeconds / 60;
             Uint32 seconds = totalSeconds % 60;
@@ -2773,7 +2395,6 @@ void Game::loadGame() {
             int xPosTimer = (1920 - timerWidth) / 2;
             timerLabel->getComponent<UILabel>().SetPosition(xPosTimer, 20);
 
-            // Initialize question labels (empty initially)
             questionLabel->addComponent<UILabel>(0, 300, "", "font1", white);
             answer1Label->addComponent<UILabel>(0, 340, "", "font1", white);
             answer2Label->addComponent<UILabel>(0, 380, "", "font1", white);
@@ -2786,7 +2407,6 @@ void Game::loadGame() {
             return;
         }
 
-        // 8. Create player
         try {
             player = &manager.addEntity();
             player->addComponent<TransformComponent>(playerX, playerY, 32, 32, 3);
@@ -2803,7 +2423,6 @@ void Game::loadGame() {
             return;
         }
 
-        // 9. Create enemies
         try {
             for (const auto& data : loadedEnemyData) {
                 Entity& enemy = manager.addEntity();
@@ -2830,7 +2449,6 @@ void Game::loadGame() {
             return;
         }
 
-        // 10. Create objects
         try {
             for (const auto& data : loadedObjectData) {
                 if (data.type == "scientist") {
@@ -2841,20 +2459,17 @@ void Game::loadGame() {
                     scientist->getComponent<SpriteComponent>().Play(scientistRescued ? "Idle" : "Locked");
                     scientist->addGroup(Game::groupObjects);
                 } else {
-                    // Handle clues, magazines, potions, cactus etc.
                     assets->CreateObject(data.x, data.y, data.type);
                 }
             }
         }
         catch (const std::exception& e) {
             std::cerr << "Object creation error: " << e.what() << std::endl;
-            // Go to main menu instead of starting a new game
             gameState = STATE_MAIN_MENU;
             initMainMenu();
             return;
         }
 
-        // 11. Get group references after recreating entities
         tiles = &manager.getGroup(Game::groupMap);
         players = &manager.getGroup(Game::groupPlayers);
         enemies = &manager.getGroup(Game::groupEnemies);
@@ -2863,18 +2478,14 @@ void Game::loadGame() {
         objects = &manager.getGroup(Game::groupObjects);
         ui = &manager.getGroup(Game::groupUI);
 
-        // Reset position recording state
         isRecordingPositions = true;
         lastRecordedPosition = player->getComponent<TransformComponent>().position;
 
-        // Set Game State
         gameState = STATE_GAME;
 
-        // Play the appropriate level music based on the loaded level
         if (assets) {
             assets->StopMusic();
             
-            // Play music based on current level
             switch (currentLevel) {
                 case 1:
                     assets->PlayMusic("level1", volumeLevel);
@@ -2886,9 +2497,7 @@ void Game::loadGame() {
                     break;
                 case 3:
                 case 4:
-                    // Level 3 and 4 share the same music until the boss is encountered
                     if (currentLevel == 4 && finalBossDefeated) {
-                        // If the boss was already defeated, no specific music needed
                         assets->PlayMusic("level3-4", volumeLevel);
                         currentMusic = "level3-4";
                     } else {
@@ -2897,7 +2506,6 @@ void Game::loadGame() {
                     }
                     break;
                 default:
-                    // Default music
                     assets->PlayMusic("level1", volumeLevel);
                     currentMusic = "level1";
                     break;
@@ -2908,42 +2516,35 @@ void Game::loadGame() {
     } 
     catch (const std::exception& e) {
         std::cerr << "Exception during game load: " << e.what() << std::endl;
-        // Return to main menu without asking for player name
         gameState = STATE_MAIN_MENU;
         initMainMenu();
     } 
     catch (...) {
         std::cerr << "Unknown exception during game load. Starting new game." << std::endl;
-        // Return to main menu without asking for player name
         gameState = STATE_MAIN_MENU;
         initMainMenu();
     }
 }
 
 void Game::initEndScreen(bool victory) {
-    // Reset selection and hover states
-    selectedEndOption = END_RESTART; // Default selection
+    selectedEndOption = END_RESTART;
     endOptionSelected = false;
-    endHighlightActive = false; // Start with no highlights
+    endHighlightActive = false;
     
-    // Play victory or game over sound
     if (victory) {
         assets->PlaySound("victory", volumeLevel);
     } else {
         assets->PlaySound("gameOver", volumeLevel);
     }
     
-    // Stop any background music
     assets->StopMusic();
     
-    // Create end screen entity objects
     endTitle = &manager.addEntity();
     endMessage = &manager.addEntity();
     endRestartButton = &manager.addEntity();
-    endReplayButton = &manager.addEntity();  // Add replay button
+    endReplayButton = &manager.addEntity();
     endMenuButton = &manager.addEntity();
     
-    // Set up UI components with appropriate text
     endTitle->addComponent<UILabel>(0, 150, victory ? "VICTORY!" : "GAME OVER", "font2", victory ? green : red);
     
     std::string message = victory ? 
@@ -2951,46 +2552,41 @@ void Game::initEndScreen(bool victory) {
         "You failed to complete your mission. Better luck next time!";
     endMessage->addComponent<UILabel>(0, 300, message, "font1", white);
     
-    // If player won, save to leaderboard
     if (victory && !playerName.empty()) {
         saveToLeaderboard(playerName, gameplayTime);
     }
     
     endRestartButton->addComponent<UILabel>(0, 450, "RESTART GAME", "font1", white);
-    endReplayButton->addComponent<UILabel>(0, 500, "REPLAY (NAJBOLJ NEPOTREBNA FUNKCIJA, KI NE DELA)", "font1", white);  // Add replay button label
-    endMenuButton->addComponent<UILabel>(0, 550, "MAIN MENU", "font1", white);  // Adjust position
+    endReplayButton->addComponent<UILabel>(0, 500, "REPLAY (NAJBOLJ NEPOTREBNA FUNKCIJA, KI NE DELA)", "font1", white);
+    endMenuButton->addComponent<UILabel>(0, 550, "MAIN MENU", "font1", white);
     
-    // Center all elements horizontally
     int titleWidth = endTitle->getComponent<UILabel>().GetWidth();
     int messageWidth = endMessage->getComponent<UILabel>().GetWidth();
     int restartWidth = endRestartButton->getComponent<UILabel>().GetWidth();
-    int replayWidth = endReplayButton->getComponent<UILabel>().GetWidth();  // Get replay button width
+    int replayWidth = endReplayButton->getComponent<UILabel>().GetWidth();
     int menuWidth = endMenuButton->getComponent<UILabel>().GetWidth();
     
     int titleX = (1920 - titleWidth) / 2;
     int messageX = (1920 - messageWidth) / 2;
     int restartX = (1920 - restartWidth) / 2;
-    int replayX = (1920 - replayWidth) / 2;  // Calculate replay button position
+    int replayX = (1920 - replayWidth) / 2;
     int menuX = (1920 - menuWidth) / 2;
     
     endTitle->getComponent<UILabel>().SetPosition(titleX, 150);
     endMessage->getComponent<UILabel>().SetPosition(messageX, 300);
     endRestartButton->getComponent<UILabel>().SetPosition(restartX, 450);
-    endReplayButton->getComponent<UILabel>().SetPosition(replayX, 500);  // Position replay button
-    endMenuButton->getComponent<UILabel>().SetPosition(menuX, 550);  // Adjust position
+    endReplayButton->getComponent<UILabel>().SetPosition(replayX, 500);
+    endMenuButton->getComponent<UILabel>().SetPosition(menuX, 550);
     
-    // Make buttons clickable
     endRestartButton->getComponent<UILabel>().SetClickable(true);
     endRestartButton->getComponent<UILabel>().SetOnClick([this]() { 
-        restart(); // Call restart function directly
+        restart();
     });
     endRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
     endRestartButton->getComponent<UILabel>().ResetHoverState();
     
-    // Make replay button clickable
     endReplayButton->getComponent<UILabel>().SetClickable(true);
     endReplayButton->getComponent<UILabel>().SetOnClick([this]() { 
-        // Call replay function
         replay();
     });
     endReplayButton->getComponent<UILabel>().SetHoverColor(yellow);
@@ -2998,18 +2594,15 @@ void Game::initEndScreen(bool victory) {
     
     endMenuButton->getComponent<UILabel>().SetClickable(true);
     endMenuButton->getComponent<UILabel>().SetOnClick([this]() { 
-        // Set a flag to return to main menu after this frame
         returnToMainMenu = true;
     });
     endMenuButton->getComponent<UILabel>().SetHoverColor(yellow);
     endMenuButton->getComponent<UILabel>().ResetHoverState();
     
-    // Change game state to end screen
     gameState = STATE_END_SCREEN;
 }
 
 void Game::updateEndScreen() {
-    // Update button states based on selected option
     if (endRestartButton && endRestartButton->hasComponent<UILabel>()) {
         endRestartButton->getComponent<UILabel>().ResetHoverState();
     }
@@ -3022,7 +2615,6 @@ void Game::updateEndScreen() {
         endMenuButton->getComponent<UILabel>().ResetHoverState();
     }
     
-    // Only highlight the selected item if highlight is active
     if (endHighlightActive) {
         switch (selectedEndOption) {
             case END_RESTART:
@@ -3047,10 +2639,9 @@ void Game::updateEndScreen() {
 }
 
 void Game::renderEndScreen() {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black background
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     
-    // Draw end screen elements
     endTitle->draw();
     endMessage->draw();
     endRestartButton->draw();
@@ -3062,29 +2653,23 @@ void Game::renderEndScreen() {
 
 void Game::togglePause() {
     if (gameState == STATE_GAME) {
-        // Store the current gameplay time when pausing
         gameplayTime = SDL_GetTicks() - gameStartTime;
         
-        // Play main menu music when paused
         if (assets) {
             assets->StopMusic();
             assets->PlayMusic("mainmenu", volumeLevel);
             currentMusic = "mainmenu";
         }
         
-        // Change to pause state
         gameState = STATE_PAUSE;
         initPauseMenu();
     } 
     else if (gameState == STATE_PAUSE) {
-        // Reset the game start time based on the stored gameplay time
         gameStartTime = SDL_GetTicks() - gameplayTime;
         
-        // Resume appropriate level music
         if (assets) {
             assets->StopMusic();
             
-            // Play music based on current level
             switch (currentLevel) {
                 case 1:
                     assets->PlayMusic("level1", volumeLevel);
@@ -3096,31 +2681,25 @@ void Game::togglePause() {
                     break;
                 case 3:
                 case 4:
-                    // Level 3 and 4 share the same music until the boss is encountered
                     if (currentLevel == 4 && finalBossDefeated) {
-                        // If the boss was already defeated, no specific music needed
                         assets->PlayMusic("level3-4", volumeLevel);
                         currentMusic = "level3-4";
                     } else {
                         assets->PlayMusic("level3-4", volumeLevel);
-                        // Reset boss music flag when returning to level 4 to allow it to trigger again
                         if (currentLevel == 4) {
                             bossMusicPlaying = false;
                         }
                     }
                     break;
                 default:
-                    // Default music
                     assets->PlayMusic("level1", volumeLevel);
                     currentMusic = "level1";
                     break;
             }
         }
         
-        // Return to game state
         gameState = STATE_GAME;
         
-        // Clean up pause menu entities by actually destroying them
         if (pauseTitle) pauseTitle->destroy();
         if (pauseResumeButton) pauseResumeButton->destroy();
         if (pauseSaveButton) pauseSaveButton->destroy();
@@ -3129,10 +2708,8 @@ void Game::togglePause() {
         if (pauseMainMenuButton) pauseMainMenuButton->destroy();
         if (pauseBackground) pauseBackground->destroy();
         
-        // Refresh entity manager to remove destroyed entities
         manager.refresh();
         
-        // Reset pointers
         pauseTitle = nullptr;
         pauseResumeButton = nullptr;
         pauseSaveButton = nullptr;
@@ -3144,12 +2721,10 @@ void Game::togglePause() {
 }
 
 void Game::initPauseMenu() {
-    // Reset selection and hover states
-    selectedPauseItem = PAUSE_RESUME; // Default selection
+    selectedPauseItem = PAUSE_RESUME;
     pauseItemSelected = false;
-    pauseHighlightActive = true; // Start with highlights active
+    pauseHighlightActive = true;
     
-    // Create pause menu entity objects
     pauseTitle = &manager.addEntity();
     pauseResumeButton = &manager.addEntity();
     pauseSaveButton = &manager.addEntity();
@@ -3157,7 +2732,6 @@ void Game::initPauseMenu() {
     pauseSettingsButton = &manager.addEntity();
     pauseMainMenuButton = &manager.addEntity();
     
-    // Set up UI components with appropriate text
     pauseTitle->addComponent<UILabel>(0, 150, "PAUSED", "font2", white);
     pauseResumeButton->addComponent<UILabel>(0, 300, "RESUME", "font1", white);
     pauseSaveButton->addComponent<UILabel>(0, 360, "SAVE GAME", "font1", white);
@@ -3165,7 +2739,6 @@ void Game::initPauseMenu() {
     pauseSettingsButton->addComponent<UILabel>(0, 480, "SETTINGS", "font1", white);
     pauseMainMenuButton->addComponent<UILabel>(0, 540, "MAIN MENU", "font1", white);
     
-    // Center all elements horizontally
     int titleWidth = pauseTitle->getComponent<UILabel>().GetWidth();
     int resumeWidth = pauseResumeButton->getComponent<UILabel>().GetWidth();
     int saveWidth = pauseSaveButton->getComponent<UILabel>().GetWidth();
@@ -3187,7 +2760,6 @@ void Game::initPauseMenu() {
     pauseSettingsButton->getComponent<UILabel>().SetPosition(settingsX, 480);
     pauseMainMenuButton->getComponent<UILabel>().SetPosition(menuX, 540);
     
-    // Make buttons clickable
     pauseResumeButton->getComponent<UILabel>().SetClickable(true);
     pauseResumeButton->getComponent<UILabel>().SetOnClick([this]() { togglePause(); });
     pauseResumeButton->getComponent<UILabel>().SetHoverColor(yellow);
@@ -3198,13 +2770,13 @@ void Game::initPauseMenu() {
     
     pauseRestartButton->getComponent<UILabel>().SetClickable(true);
     pauseRestartButton->getComponent<UILabel>().SetOnClick([this]() { 
-        restart(); // Call the actual restart function directly
+        restart();
     });
     pauseRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
     
     pauseSettingsButton->getComponent<UILabel>().SetClickable(true);
     pauseSettingsButton->getComponent<UILabel>().SetOnClick([this]() { 
-        previousState = STATE_PAUSE; // Store that we came from pause menu
+        previousState = STATE_PAUSE;
         gameState = STATE_SETTINGS;
         initSettingsMenu();
     });
@@ -3214,12 +2786,10 @@ void Game::initPauseMenu() {
     pauseMainMenuButton->getComponent<UILabel>().SetOnClick([this]() { returnToMainMenu = true; });
     pauseMainMenuButton->getComponent<UILabel>().SetHoverColor(yellow);
     
-    // Update the pause menu to apply initial highlighting
     updatePauseMenu();
 }
 
 void Game::updatePauseMenu() {
-    // Reset all buttons to default state
     if (pauseResumeButton && pauseResumeButton->hasComponent<UILabel>()) {
         pauseResumeButton->getComponent<UILabel>().ResetHoverState();
     }
@@ -3240,7 +2810,6 @@ void Game::updatePauseMenu() {
         pauseMainMenuButton->getComponent<UILabel>().ResetHoverState();
     }
     
-    // Only highlight the selected item if highlight is active
     if (pauseHighlightActive) {
         switch (selectedPauseItem) {
             case PAUSE_RESUME:
@@ -3275,31 +2844,26 @@ void Game::updatePauseMenu() {
 }
 
 void Game::renderPauseMenu() {
-    // First render the game in the background
     for(auto& t : *tiles) t->draw();
     for(auto& p : *players) p->draw();
     for(auto& e : *enemies) e->draw();
     for(auto& o : *objects) o->draw();
     for(auto& p : *projectiles) p->draw();
     
-    // Ensure scientist is drawn if it exists
     if (scientist != nullptr && scientist->isActive()) {
         scientist->draw();
     }
     
-    // Draw normal UI elements in the background
     healthbar->draw();
     ammobar->draw();
     clueCounter->draw();
     timerLabel->draw();
     
-    // Add a semi-transparent black overlay for the entire screen
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // Black with 70% opacity
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
     SDL_Rect fullscreen = {0, 0, 1920, 1080};
     SDL_RenderFillRect(renderer, &fullscreen);
     
-    // Now draw the pause menu elements on top
     if (pauseTitle) pauseTitle->draw();
     if (pauseResumeButton) pauseResumeButton->draw();
     if (pauseSaveButton) pauseSaveButton->draw();
@@ -3311,22 +2875,17 @@ void Game::renderPauseMenu() {
 }
 
 void Game::saveGame() {
-    // Prevent saving if the player doesn't exist (e.g., game over screen)
     if (!player || !player->isActive()) {
         std::cout << "Cannot save game: Player does not exist." << std::endl;
-        // Optionally show a UI message indicating save is not possible
         return;
     }
 
     std::ofstream saveFile("assets/savegame.bin", std::ios::binary | std::ios::trunc);
     if (!saveFile.is_open()) {
         std::cerr << "Error: Could not open savegame.bin for writing!" << std::endl;
-        // Optionally show a UI message about the failure
         return;
     }
 
-    // --- Gather Data ---
-    // Player Data
     TransformComponent& playerTransform = player->getComponent<TransformComponent>();
     HealthComponent& playerHealth = player->getComponent<HealthComponent>();
     AmmoComponent& playerAmmo = player->getComponent<AmmoComponent>();
@@ -3336,60 +2895,45 @@ void Game::saveGame() {
     int pCurrentAmmo = playerAmmo.currentAmmo;
     int pMaxAmmo = playerAmmo.maxAmmo;
 
-    // Game State
-    // collectedClues, currentLevel, gameplayTime, level4 flags are already member variables
-
-    // Used Questions (convert set to vector for easier saving)
     std::vector<int> questionsToSave(usedQuestions.begin(), usedQuestions.end());
 
-    // Enemy Data
     std::vector<EnemySaveData> enemiesToSave;
-    manager.refresh(); // Ensure groups are up-to-date
-    enemies = &manager.getGroup(Game::groupEnemies); // Refresh pointer just in case
+    manager.refresh();
+    enemies = &manager.getGroup(Game::groupEnemies);
     for (const auto& enemy : *enemies) {
         if (enemy->isActive()) {
             TransformComponent& et = enemy->getComponent<TransformComponent>();
             HealthComponent& eh = enemy->getComponent<HealthComponent>();
-            bool isBoss = (enemy == finalBoss); // Check if it's the final boss
+            bool isBoss = (enemy == finalBoss);
             enemiesToSave.push_back({et.position.x, et.position.y, eh.health, isBoss});
         }
     }
 
-    // Object Data (Clues, Items, Scientist)
     std::vector<ObjectSaveData> objectsToSave;
-    objects = &manager.getGroup(Game::groupObjects); // Refresh pointer
+    objects = &manager.getGroup(Game::groupObjects);
     for (const auto& object : *objects) {
         if (object->isActive() && object->hasComponent<ColliderComponent>()) {
             TransformComponent& ot = object->getComponent<TransformComponent>();
-            std::string type = object->getComponent<ColliderComponent>().tag; // Use tag as type
+            std::string type = object->getComponent<ColliderComponent>().tag;
 
-             // Ensure type is correct for scientist
              if (object == scientist) {
                  type = "scientist";
              }
 
-            // Only save relevant object types
             if (type == "clue" || type == "magazine" || type == "healthpotion" || type == "scientist" || type == "cactus") {
                  objectsToSave.push_back({ot.position.x, ot.position.y, type});
             }
         }
     }
 
-     // Removed getting scientist state string
-
-
-    // --- Write Data ---
-    // Player
     saveFile.write(reinterpret_cast<const char*>(&pX), sizeof(pX));
     saveFile.write(reinterpret_cast<const char*>(&pY), sizeof(pY));
     saveFile.write(reinterpret_cast<const char*>(&pHealth), sizeof(pHealth));
     saveFile.write(reinterpret_cast<const char*>(&pCurrentAmmo), sizeof(pCurrentAmmo));
     saveFile.write(reinterpret_cast<const char*>(&pMaxAmmo), sizeof(pMaxAmmo));
     
-    // Save player name
     writeString(saveFile, playerName);
 
-    // Game State
     saveFile.write(reinterpret_cast<const char*>(&collectedClues), sizeof(collectedClues));
     saveFile.write(reinterpret_cast<const char*>(&currentLevel), sizeof(currentLevel));
     saveFile.write(reinterpret_cast<const char*>(&gameplayTime), sizeof(gameplayTime));
@@ -3398,14 +2942,12 @@ void Game::saveGame() {
     saveFile.write(reinterpret_cast<const char*>(&scientistRescued), sizeof(scientistRescued));
     saveFile.write(reinterpret_cast<const char*>(&canRescueScientist), sizeof(canRescueScientist));
 
-    // Used Questions
     size_t numUsedQuestions = questionsToSave.size();
     saveFile.write(reinterpret_cast<const char*>(&numUsedQuestions), sizeof(numUsedQuestions));
     for (int questionIndex : questionsToSave) {
         saveFile.write(reinterpret_cast<const char*>(&questionIndex), sizeof(questionIndex));
     }
 
-    // Enemy Data
     size_t numEnemies = enemiesToSave.size();
     saveFile.write(reinterpret_cast<const char*>(&numEnemies), sizeof(numEnemies));
     for (const auto& data : enemiesToSave) {
@@ -3415,7 +2957,6 @@ void Game::saveGame() {
         saveFile.write(reinterpret_cast<const char*>(&data.isBoss), sizeof(bool));
     }
 
-    // Object Data
     size_t numObjects = objectsToSave.size();
     saveFile.write(reinterpret_cast<const char*>(&numObjects), sizeof(numObjects));
     for (const auto& data : objectsToSave) {
@@ -3424,22 +2965,17 @@ void Game::saveGame() {
         writeString(saveFile, data.type);
     }
 
-     // Removed writing scientist state string
-
     saveFile.close();
 
     std::cout << "Game saved successfully." << std::endl;
 
-    // Show notification (simplified - using existing feedback label if available)
     if (feedbackLabel && feedbackLabel->hasComponent<UILabel>()) {
-        // Check if we're showing exit instructions and need to temporarily override
         bool isExitInstructions = 
             showingExitInstructions && 
             ((currentLevel != 4 && collectedClues >= totalClues) || 
             (currentLevel == 4 && finalBossDefeated));
             
         if (isExitInstructions) {
-            // Store the current exit instructions text
             if (currentLevel == 3) {
                 savedExitInstructionsText = "All clues collected! Enter the pyramid to see what lies ahead.";
             } else if (currentLevel == 4 && level4MapChanged) {
@@ -3450,152 +2986,81 @@ void Game::saveGame() {
             hasSavedDuringExitInstructions = true;
         }
     
-        // Display save notification regardless of current state
         feedbackLabel->getComponent<UILabel>().SetLabelText("Game Saved!", "font1", green);
         int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
         int xPos = (1920 - feedbackWidth) / 2;
-        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Position at bottom
-        showFeedback = true; // Make it visible
-        feedbackStartTime = SDL_GetTicks(); // Start timer to hide it
+        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950);
+        showFeedback = true;
+        feedbackStartTime = SDL_GetTicks();
     } else {
-        // Fallback if feedbackLabel isn't ready (e.g., called too early)
-         std::cout << "Feedback label not available for save notification." << std::endl;
+        std::cout << "Feedback label not available for save notification." << std::endl;
     }
 }
 
 void Game::initSettingsMenu() {
-    // Reset selection and hover states
     selectedSettingsItem = SETTINGS_VOLUME;
     settingsItemSelected = false;
     settingsHighlightActive = true;
     draggingVolumeSlider = false;
     
-    // Create settings menu entity objects
     settingsTitle = &manager.addEntity();
-    volumeSlider = &manager.addEntity();
     volumeLabel = &manager.addEntity();
     keybindsLabel = &manager.addEntity();
     settingsBackButton = &manager.addEntity();
     
-    // Set up UI components with appropriate text
     settingsTitle->addComponent<UILabel>(0, 150, "SETTINGS", "font2", white);
     
-    // Create volume slider and label
     std::stringstream volSS;
     volSS << "Volume: " << volumeLevel << "%";
     volumeLabel->addComponent<UILabel>(0, 300, volSS.str(), "font1", white);
     
-    // Create a fixed-width slider with equal-sized segments
-    std::string sliderText = "[";
-    int sliderLength = 40;
-    int filledAmount = (volumeLevel * sliderLength) / 100;
-    
-    for (int i = 0; i < sliderLength; i++) {
-        if (i < filledAmount) {
-            sliderText += "=";
-        } else {
-            sliderText += " ";
-        }
-    }
-    sliderText += "]";
-    
-    // Use a monospace font if available, or a fixed-width representation
-    volumeSlider->addComponent<UILabel>(0, 340, sliderText, "font1", white);
-    
-    // Keybinds section - just the title
     keybindsLabel->addComponent<UILabel>(0, 400, "CONTROLS", "font1", white);
     
-    // Back button - changing Y position from 720 to an even lower position
     settingsBackButton->addComponent<UILabel>(0, 800, "BACK", "font1", white);
     
-    // Center all elements horizontally
     int titleWidth = settingsTitle->getComponent<UILabel>().GetWidth();
     int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
-    int sliderWidth = volumeSlider->getComponent<UILabel>().GetWidth();
     int keybindsWidth = keybindsLabel->getComponent<UILabel>().GetWidth();
     int backWidth = settingsBackButton->getComponent<UILabel>().GetWidth();
     
     int titleX = (1920 - titleWidth) / 2;
     int volLabelX = (1920 - volLabelWidth) / 2;
-    int sliderX = (1920 - sliderWidth) / 2;
     int keybindsX = (1920 - keybindsWidth) / 2;
     int backX = (1920 - backWidth) / 2;
     
     settingsTitle->getComponent<UILabel>().SetPosition(titleX, 150);
     volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
-    volumeSlider->getComponent<UILabel>().SetPosition(sliderX, 340);
     keybindsLabel->getComponent<UILabel>().SetPosition(keybindsX, 400);
     settingsBackButton->getComponent<UILabel>().SetPosition(backX, 800);
     
-    // Make back button clickable - return to correct previous state
     settingsBackButton->getComponent<UILabel>().SetClickable(true);
     settingsBackButton->getComponent<UILabel>().SetOnClick([this]() { 
-        gameState = previousState; // Return to previous state (main menu or pause)
+        gameState = previousState; 
         applySettings();
     });
     settingsBackButton->getComponent<UILabel>().SetHoverColor(yellow);
     
-    // Make slider clickable
-    volumeSlider->getComponent<UILabel>().SetClickable(true);
-    volumeSlider->getComponent<UILabel>().SetHoverColor(yellow);
-    
-    // Update the settings menu to apply initial highlighting
     updateSettingsMenu();
 }
 
 void Game::updateSettingsMenu() {
-    // Update volume label based on current volume level
     if (volumeLabel && volumeLabel->hasComponent<UILabel>()) {
         std::stringstream volSS;
         volSS << "Volume: " << volumeLevel << "%";
         volumeLabel->getComponent<UILabel>().SetLabelText(volSS.str(), "font1");
         
-        // Center the updated label
         int volLabelWidth = volumeLabel->getComponent<UILabel>().GetWidth();
         int volLabelX = (1920 - volLabelWidth) / 2;
         volumeLabel->getComponent<UILabel>().SetPosition(volLabelX, 300);
-    }
-    
-    // Update slider visual - recreate the entire slider to maintain fixed width
-    if (volumeSlider && volumeSlider->hasComponent<UILabel>()) {
-        std::string sliderText = "[";
-        int sliderLength = 40;
-        int filledAmount = (volumeLevel * sliderLength) / 100;
-        
-        for (int i = 0; i < sliderLength; i++) {
-            if (i < filledAmount) {
-                sliderText += "=";
-            } else {
-                sliderText += " ";
-            }
-        }
-        sliderText += "]";
-        
-        // Update slider text but maintain position
-        volumeSlider->getComponent<UILabel>().SetLabelText(sliderText, "font1");
-        
-        // Re-center the slider 
-        int sliderWidth = volumeSlider->getComponent<UILabel>().GetWidth();
-        int sliderX = (1920 - sliderWidth) / 2;
-        volumeSlider->getComponent<UILabel>().SetPosition(sliderX, 340);
-    }
-    
-    // Reset all items to default state
-    if (volumeSlider && volumeSlider->hasComponent<UILabel>()) {
-        volumeSlider->getComponent<UILabel>().ResetHoverState();
     }
     
     if (settingsBackButton && settingsBackButton->hasComponent<UILabel>()) {
         settingsBackButton->getComponent<UILabel>().ResetHoverState();
     }
     
-    // Only highlight the selected item if highlight is active
     if (settingsHighlightActive) {
         switch (selectedSettingsItem) {
             case SETTINGS_VOLUME:
-                if (volumeSlider && volumeSlider->hasComponent<UILabel>()) {
-                    volumeSlider->getComponent<UILabel>().SetTextColor(yellow);
-                }
                 break;
             case SETTINGS_BACK:
                 if (settingsBackButton && settingsBackButton->hasComponent<UILabel>()) {
@@ -3609,95 +3074,78 @@ void Game::updateSettingsMenu() {
 }
 
 void Game::renderSettingsMenu() {
-    // Determine the background based on where we came from
     if (previousState == STATE_PAUSE) {
-        // When coming from pause menu, draw the game in the background
         for(auto& t : *tiles) t->draw();
         for(auto& p : *players) p->draw();
         for(auto& e : *enemies) e->draw();
         for(auto& o : *objects) o->draw();
         for(auto& p : *projectiles) p->draw();
         
-        // Ensure scientist is drawn if it exists
         if (scientist != nullptr && scientist->isActive()) {
             scientist->draw();
         }
         
-        // Draw normal UI elements in the background
         healthbar->draw();
         ammobar->draw();
         clueCounter->draw();
         timerLabel->draw();
     } else {
-        // When coming from main menu, just draw a black background
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black background
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
     }
     
-    // Add a semi-transparent black overlay for the entire screen
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180); // Black with 70% opacity
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
     SDL_Rect fullscreen = {0, 0, 1920, 1080};
     SDL_RenderFillRect(renderer, &fullscreen);
     
-    // Now draw the settings menu elements on top
     if (settingsTitle) settingsTitle->draw();
     if (volumeLabel) volumeLabel->draw();
     
-    // Draw a graphical volume slider instead of text-based one
     int screenCenter = 1920 / 2;
     int sliderY = 340;
     int sliderWidth = 400;
     int sliderHeight = 20;
     int sliderX = screenCenter - (sliderWidth / 2);
     
-    // Draw slider background
-    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255); // Dark gray
+    SDL_SetRenderDrawColor(renderer, 80, 80, 80, 255);
     SDL_Rect sliderBg = {sliderX, sliderY, sliderWidth, sliderHeight};
     SDL_RenderFillRect(renderer, &sliderBg);
     
-    // Draw filled portion based on volume
     int filledWidth = (volumeLevel * sliderWidth) / 100;
-    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // Light gray
+    SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
     SDL_Rect filledRect = {sliderX, sliderY, filledWidth, sliderHeight};
     SDL_RenderFillRect(renderer, &filledRect);
     
-    // Draw border
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderDrawRect(renderer, &sliderBg);
     
-    // Draw slider knob/handle
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); // White
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     int knobX = sliderX + filledWidth - 4;
     SDL_Rect knob = {knobX, sliderY - 5, 8, sliderHeight + 10};
     SDL_RenderFillRect(renderer, &knob);
     
-    // Highlight slider if selected
     if (settingsHighlightActive && selectedSettingsItem == SETTINGS_VOLUME) {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255); // Yellow
+        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
         SDL_Rect highlightRect = {sliderX - 2, sliderY - 2, sliderWidth + 4, sliderHeight + 4};
         SDL_RenderDrawRect(renderer, &highlightRect);
     }
     
-    // Draw keybinds manually with increased spacing
     if (keybindsLabel) {
         keybindsLabel->draw();
         
-        // Manually draw each keybind entry
         TTF_Font* font = assets->GetFont("font1");
         if (font) {
-            int yOffset = 450; // Increased starting position
+            int yOffset = 450;
             int screenCenter = 1920 / 2;
             
             for (const auto& keybind : keybinds) {
                 std::string bindText = keybind.action + ": " + keybind.key;
                 
-                // Render text
                 SDL_Surface* textSurface = TTF_RenderText_Solid(font, bindText.c_str(), white);
                 if (textSurface) {
                     SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
                     if (textTexture) {
-                        // Center the text
                         int textWidth = textSurface->w;
                         int textHeight = textSurface->h;
                         int xPos = screenCenter - (textWidth / 2);
@@ -3710,38 +3158,31 @@ void Game::renderSettingsMenu() {
                     SDL_FreeSurface(textSurface);
                 }
                 
-                yOffset += 45; // Even more spacing between controls (was 40)
+                yOffset += 45;
             }
         }
     }
     
-    // Draw the back button
     if (settingsBackButton) settingsBackButton->draw();
     
     SDL_RenderPresent(renderer);
 }
 
 void Game::applySettings() {
-    // Apply volume settings
     if (assets) {
         assets->SetMasterVolume(volumeLevel);
     }
     
-    // Clean up settings menu entities
     if (settingsTitle) settingsTitle->destroy();
-    if (volumeSlider) volumeSlider->destroy();
     if (volumeLabel) volumeLabel->destroy();
     if (keybindsLabel) keybindsLabel->destroy();
     if (settingsBackButton) settingsBackButton->destroy();
     
-    // Reset pointers
     settingsTitle = nullptr;
-    volumeSlider = nullptr;
     volumeLabel = nullptr;
     keybindsLabel = nullptr;
     settingsBackButton = nullptr;
     
-    // Reset state
     selectedSettingsItem = SETTINGS_VOLUME;
     settingsHighlightActive = false;
     settingsItemSelected = false;
@@ -3749,10 +3190,7 @@ void Game::applySettings() {
 }
 
 void Game::replay() {
-    // Reset game state for replay
     gameState = STATE_REPLAY;
-    
-    // Always start replay from level 1 regardless of current level
     readAllPositionsFromFile();
 }
 
@@ -3810,14 +3248,12 @@ void Game::readAllPositionsFromFile() {
     gameState = STATE_REPLAY; 
     loadLevel(currentReplayLevel);
     Vector2D startPos = allReplayPositionsByLevel[currentReplayLevel][0];
-    // Removed debug print
 
     if (replayEntity) { replayEntity->destroy(); replayEntity = nullptr; }
     replayEntity = &manager.addEntity();
     replayEntity->addComponent<TransformComponent>(startPos.x, startPos.y, 32, 32, 3);
     replayEntity->addComponent<SpriteComponent>("player", true);
     replayEntity->addGroup(Game::groupPlayers);
-    // Removed debug print
 
     if (timerLabel) { timerLabel->destroy(); timerLabel = nullptr; }
     timerLabel = &manager.addEntity();
@@ -3828,19 +3264,14 @@ void Game::readAllPositionsFromFile() {
 
 void Game::updateReplay() {
     if (!isReplaying || !replayEntity || !replayEntity->hasComponent<TransformComponent>()) return;
-    // Removed debug print
 
     if (replayEntity->hasComponent<SpriteComponent>()) { replayEntity->getComponent<SpriteComponent>().update(); }
     Uint32 currentTime = SDL_GetTicks();
-    if (replayEntity) { /* Camera logic ... */ }
 
     if (allReplayPositionsByLevel.find(currentReplayLevel) == allReplayPositionsByLevel.end() || allReplayPositionsByLevel[currentReplayLevel].empty()) { /* End replay logic ... */ return; }
     const auto& currentLevelPositions = allReplayPositionsByLevel[currentReplayLevel];
-    if (timerLabel) { /* UI update logic ... */ }
 
     if (currentTime - lastReplayFrameTime >= replayFrameTime) {
-        if (replayPositionIndex >= currentLevelPositions.size()) { /* Level transition logic ... */ return; }
-
         auto& transform = replayEntity->getComponent<TransformComponent>();
         float currentX = transform.position.x; float currentY = transform.position.y;
         Vector2D nextPos = currentLevelPositions[replayPositionIndex];
@@ -3848,11 +3279,6 @@ void Game::updateReplay() {
 
         transform.position.x = nextPos.x; transform.position.y = nextPos.y;
         transform.velocity.x = 0; transform.velocity.y = 0;
-
-        bool isFinalPositionInLevel = (replayPositionIndex == currentLevelPositions.size() - 1);
-        if (isFinalPositionInLevel) { /* Idle animation logic ... */ }
-        else { /* Movement animation logic ... */ }
-
         replayPositionIndex++;
         lastReplayFrameTime = currentTime;
     }
@@ -3863,13 +3289,10 @@ void Game::renderReplay() {
     for(auto& t : *tiles) t->draw();
 
     if (replayEntity && replayEntity->hasComponent<TransformComponent>()) {
-        // Camera is updated in updateReplay now, just use it
-        // Render the replay entity
         replayEntity->draw();
     }
 
     if (timerLabel) {
-        // Position is updated in updateReplay
         timerLabel->draw();
     }
 
@@ -3877,26 +3300,20 @@ void Game::renderReplay() {
 }
 
 void Game::recordPlayerPosition() {
-    // Only record positions if a player exists and recording is enabled
     if (player && isRecordingPositions && gameState == STATE_GAME) {
-        // Get current player position
         Vector2D currentPosition = player->getComponent<TransformComponent>().position;
         
-        // Record if position has changed (more sensitive threshold)
         const float recordThreshold = 0.1f;
         if (std::abs(currentPosition.x - lastRecordedPosition.x) >= recordThreshold || 
             std::abs(currentPosition.y - lastRecordedPosition.y) >= recordThreshold) {
             
-            // Open file in append mode
             std::ofstream positionFile("assets/position.txt", std::ios::app);
             
             if (positionFile.is_open()) {
-                // Format: x,y,level with commas as separators for clarity
                 positionFile << static_cast<int>(currentPosition.x) << "," 
                              << static_cast<int>(currentPosition.y) << "," 
                              << currentLevel << std::endl;
                 
-                // Update last recorded position
                 lastRecordedPosition = currentPosition;
             }
             positionFile.close();
@@ -3905,43 +3322,34 @@ void Game::recordPlayerPosition() {
 }
 
 void Game::promptPlayerName() {
-    // Clear previous input buffer
     SDL_StopTextInput();
     SDL_StartTextInput();
     
-    // Set flag to indicate we're waiting for player name input
     waitingForPlayerName = true;
     playerName = "";
     
-    // Create UI label for name prompt
     Entity* namePrompt = &manager.addEntity();
     namePrompt->addComponent<UILabel>(0, 400, "Enter your name:", "font1", white);
     
-    // Center the prompt
     int promptWidth = namePrompt->getComponent<UILabel>().GetWidth();
     int promptX = (1920 - promptWidth) / 2;
     namePrompt->getComponent<UILabel>().SetPosition(promptX, 400);
     
-    // Create UI label for the input box
     Entity* inputBox = &manager.addEntity();
     inputBox->addComponent<UILabel>(0, 450, "_", "font1", white);
     
-    // Center the input box
     int inputWidth = inputBox->getComponent<UILabel>().GetWidth();
     int inputX = (1920 - inputWidth) / 2;
     inputBox->getComponent<UILabel>().SetPosition(inputX, 450);
     
-    // Show the UI
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     namePrompt->draw();
     inputBox->draw();
     SDL_RenderPresent(renderer);
     
-    // Main input loop
     bool enteringName = true;
     while (enteringName && isRunning) {
-        // Handle events for text input
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
                 isRunning = false;
@@ -3949,39 +3357,32 @@ void Game::promptPlayerName() {
             }
             else if (event.type == SDL_KEYDOWN) {
                 if (event.key.keysym.sym == SDLK_RETURN) {
-                    // Name is complete when Enter is pressed
                     enteringName = false;
                     if (playerName.empty()) {
-                        playerName = "Player"; // Default name
+                        playerName = "Player";
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_BACKSPACE && !playerName.empty()) {
-                    // Remove last character on backspace
                     playerName.pop_back();
                 }
                 else if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    // Cancel name entry
                     enteringName = false;
-                    playerName = "Player"; // Default name
+                    playerName = "Player";
                 }
             }
             else if (event.type == SDL_TEXTINPUT) {
-                // Append text input to player name (limit to 15 characters)
                 if (playerName.length() < 15) {
                     playerName += event.text.text;
                 }
             }
             
-            // Update input box text
             std::string displayText = playerName + "_";
             inputBox->getComponent<UILabel>().SetLabelText(displayText, "font1");
             
-            // Re-center the input box
             inputWidth = inputBox->getComponent<UILabel>().GetWidth();
             inputX = (1920 - inputWidth) / 2;
             inputBox->getComponent<UILabel>().SetPosition(inputX, 450);
             
-            // Redraw the UI
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
             namePrompt->draw();
@@ -3989,26 +3390,21 @@ void Game::promptPlayerName() {
             SDL_RenderPresent(renderer);
         }
         
-        // Small delay to prevent hogging CPU
         SDL_Delay(16);
     }
     
-    // Clean up text input
     SDL_StopTextInput();
     waitingForPlayerName = false;
     
-    // Remove the UI elements
     namePrompt->destroy();
     inputBox->destroy();
     manager.refresh();
     
-    // Now actually start the game with the collected player name
-    // Reset all game state variables for a fresh start
     gameOver = false;
     playerWon = false;
     collectedClues = 0;
     damageTimer = 1.0f;
-    hurtSoundTimer = 0.0f; // Reset hurt sound timer
+    hurtSoundTimer = 0.0f;
     objectCollisionDelay = 1.0f;
     objectCollisionsEnabled = false;
     questionActive = false;
@@ -4017,28 +3413,22 @@ void Game::promptPlayerName() {
     showingExitInstructions = false;
     level4MapChanged = false;
     finalBossDefeated = false;
-    bossMusicPlaying = false; // Reset boss music state
-    scientistRescued = false; // Reset scientist state
-    canRescueScientist = false; // Reset scientist interaction flag
+    bossMusicPlaying = false;
+    scientistRescued = false;
+    canRescueScientist = false;
     currentLevel = 1;
     
-    // Reset used questions when starting a new game
     resetUsedQuestions();
     
-    // Clear previous recorded positions and enable recording
     std::ofstream positionFile("assets/position.txt", std::ios::trunc);
     positionFile.close();
     isRecordingPositions = true;
     lastRecordedPosition = Vector2D(0, 0);
     
-    // Change game state
     gameState = STATE_GAME;
-    
-    // Start gameplay timer
     gameStartTime = SDL_GetTicks();
     gameplayTime = 0;
     
-    // Clear menu entities
     menuTitle = nullptr;
     menuNewGameButton = nullptr;
     menuLoadGameButton = nullptr;
@@ -4046,7 +3436,6 @@ void Game::promptPlayerName() {
     menuLeaderboardButton = nullptr;
     menuExitButton = nullptr;
     
-    // Reset all entity pointers
     player = nullptr;
     finalBoss = nullptr;
     healthbar = nullptr;
@@ -4062,37 +3451,29 @@ void Game::promptPlayerName() {
     answer4Label = nullptr;
     questionBackground = nullptr;
     
-    // Clear all existing entities
     manager.clear();
     
-    // Ensure transition label is recreated
     transitionLabel = &manager.addEntity();
     transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
     transitionManager.mTransitionLabel = transitionLabel;
     
-    // Re-initialize transition manager with new entity manager state
     transitionManager.init(this, &manager);
     
-    // Start with level 1
     currentLevel = 1;
     
-    // Reset position tracking
     positionManager.resetPositions();
     
-    // Load the level and initialize game entities
     loadLevel(currentLevel);
     initEntities();
 }
 
 void Game::initLeaderboard() {
-    // Load leaderboard entries from file
     leaderboardEntries.clear();
     
     std::ifstream file("assets/leaderboard.txt");
     if (file.is_open()) {
         std::string line;
         while (std::getline(file, line) && leaderboardEntries.size() < 5) {
-            // Parse line format: "PlayerName,Time"
             size_t commaPos = line.find(',');
             if (commaPos != std::string::npos) {
                 std::string name = line.substr(0, commaPos);
@@ -4103,55 +3484,44 @@ void Game::initLeaderboard() {
         file.close();
     }
     
-    // Create leaderboard UI elements
     leaderboardTitle = &manager.addEntity();
     leaderboardTitle->addComponent<UILabel>(0, 150, "LEADERBOARD", "font2", white);
     
-    // Center the title
     int titleWidth = leaderboardTitle->getComponent<UILabel>().GetWidth();
     int titleX = (1920 - titleWidth) / 2;
     leaderboardTitle->getComponent<UILabel>().SetPosition(titleX, 150);
     
-    // Create labels for each entry (or "No entries" if empty)
     if (leaderboardEntries.empty()) {
         leaderboardEntryLabels[0] = &manager.addEntity();
         leaderboardEntryLabels[0]->addComponent<UILabel>(0, 300, "No entries yet", "font1", white);
         
-        // Center the message
         int msgWidth = leaderboardEntryLabels[0]->getComponent<UILabel>().GetWidth();
         int msgX = (1920 - msgWidth) / 2;
         leaderboardEntryLabels[0]->getComponent<UILabel>().SetPosition(msgX, 300);
-    } else {
+    } 
+    else {
         for (int i = 0; i < leaderboardEntries.size(); i++) {
-            // Format like: "RUN #: PLAYER_NAME TIME" - run numbers should indicate chronological order
-            // Run #1 is now the oldest run, and higher numbers are newer runs
             std::string entryText = "RUN " + std::to_string(i + 1) + ": " + leaderboardEntries[i].first + " " + leaderboardEntries[i].second;
             leaderboardEntryLabels[i] = &manager.addEntity();
             leaderboardEntryLabels[i]->addComponent<UILabel>(0, 250 + i * 80, entryText, "font1", white);
             
-            // Center each entry
             int entryWidth = leaderboardEntryLabels[i]->getComponent<UILabel>().GetWidth();
             int entryX = (1920 - entryWidth) / 2;
             leaderboardEntryLabels[i]->getComponent<UILabel>().SetPosition(entryX, 250 + i * 80);
         }
     }
     
-    // Create ESC to return message instead of a button
     leaderboardBackButton = &manager.addEntity();
     leaderboardBackButton->addComponent<UILabel>(0, 700, "PRESS ESC TO RETURN", "font1", white);
     
-    // Center the message
     int backWidth = leaderboardBackButton->getComponent<UILabel>().GetWidth();
     int backX = (1920 - backWidth) / 2;
     leaderboardBackButton->getComponent<UILabel>().SetPosition(backX, 700);
     
-    // Make the button clickable to return to main menu
     leaderboardBackButton->getComponent<UILabel>().SetClickable(true);
     leaderboardBackButton->getComponent<UILabel>().SetOnClick([this]() {
-        // Return to main menu
         gameState = STATE_MAIN_MENU;
         
-        // Clean up leaderboard UI
         if (leaderboardTitle) leaderboardTitle->destroy();
         for (auto& label : leaderboardEntryLabels) {
             if (label) label->destroy();
@@ -4159,18 +3529,15 @@ void Game::initLeaderboard() {
         }
         leaderboardBackButton->destroy();
         
-        // Re-init main menu
         initMainMenu();
     });
     leaderboardBackButton->getComponent<UILabel>().SetHoverColor(yellow);
 }
 
 void Game::renderLeaderboard() {
-    // Use a solid black background
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     
-    // Draw leaderboard elements
     leaderboardTitle->draw();
     for (auto& label : leaderboardEntryLabels) {
         if (label) label->draw();
@@ -4181,7 +3548,6 @@ void Game::renderLeaderboard() {
 }
 
 void Game::updateLeaderboard() {
-    // Handle hover state for back button
     if (leaderboardBackButton && leaderboardBackButton->hasComponent<UILabel>()) {
         int mouseX, mouseY;
         SDL_GetMouseState(&mouseX, &mouseY);
@@ -4196,7 +3562,6 @@ void Game::updateLeaderboard() {
 }
 
 void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
-    // Format time as MM:SS
     Uint32 totalSeconds = gameTime / 1000;
     Uint32 minutes = totalSeconds / 60;
     Uint32 seconds = totalSeconds % 60;
@@ -4205,14 +3570,12 @@ void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
         (minutes < 10 ? "0" : "") + std::to_string(minutes) + ":" + 
         (seconds < 10 ? "0" : "") + std::to_string(seconds);
     
-    // Read existing entries
     std::vector<std::pair<std::string, std::string>> entries;
     
     std::ifstream inFile("assets/leaderboard.txt");
     if (inFile.is_open()) {
         std::string line;
         while (std::getline(inFile, line) && entries.size() < 5) {
-            // Parse line format: "PlayerName,Time"
             size_t commaPos = line.find(',');
             if (commaPos != std::string::npos) {
                 std::string name = line.substr(0, commaPos);
@@ -4223,15 +3586,12 @@ void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
         inFile.close();
     }
     
-    // Add new entry at the end (oldest runs first, newest last)
     entries.push_back(std::make_pair(playerName, formattedTime));
     
-    // If we have more than 5 entries, remove the oldest (first) entry
     if (entries.size() > 5) {
-        entries.erase(entries.begin()); // Remove the first (oldest) entry
+        entries.erase(entries.begin());
     }
     
-    // Save back to file
     std::ofstream outFile("assets/leaderboard.txt");
     if (outFile.is_open()) {
         for (const auto& entry : entries) {
@@ -4240,9 +3600,7 @@ void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
         outFile.close();
     }
     
-    // Update leaderboard display if we're in that state
     if (gameState == STATE_LEADERBOARD) {
-        // Clean up old UI
         if (leaderboardTitle) leaderboardTitle->destroy();
         for (auto& label : leaderboardEntryLabels) {
             if (label) label->destroy();
@@ -4250,7 +3608,6 @@ void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
         }
         if (leaderboardBackButton) leaderboardBackButton->destroy();
         
-        // Re-initialize with updated data
         initLeaderboard();
     }
 }

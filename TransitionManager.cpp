@@ -15,14 +15,12 @@ TransitionManager::TransitionManager() :
 }
 
 TransitionManager::~TransitionManager() {
-    // No dynamic memory to clean up
 }
 
 void TransitionManager::init(Game* game, Manager* manager) {
     mGame = game;
     mManager = manager;
     
-    // Create transition label entity
     if (mTransitionLabel == nullptr && mManager != nullptr) {
         mTransitionLabel = &mManager->addEntity();
         mTransitionLabel->addComponent<UILabel>(0, 0, "", "font2", mWhite);
@@ -30,17 +28,14 @@ void TransitionManager::init(Game* game, Manager* manager) {
 }
 
 void TransitionManager::startTransition(int currentLevel, int nextLevel) {
-    // Start transition sequence
     mIsTransitioning = true;
     mTransitionStartTime = SDL_GetTicks();
-    mTransitionState = 0; // Start with fade in
+    mTransitionState = 0;
     
-    // Set transition text to show between levels
     std::stringstream levelMessage;
     levelMessage << "Level " << nextLevel;
     mLevelTransitionText = levelMessage.str();
     
-    // Center the transition text
     if (mTransitionLabel != nullptr) {
         mTransitionLabel->getComponent<UILabel>().SetLabelText(mLevelTransitionText, "font2", mWhite);
         int textWidth = mTransitionLabel->getComponent<UILabel>().GetWidth();
@@ -59,35 +54,30 @@ bool TransitionManager::updateTransition() {
     Uint32 currentTime = SDL_GetTicks();
     Uint32 elapsedTime = currentTime - mTransitionStartTime;
     
-    // Update transition state based on elapsed time
-    if (mTransitionState == 0) { // Fade in
+    if (mTransitionState == 0) {
         if (elapsedTime >= mFadeInOutDuration) {
-            mTransitionState = 1; // Move to showing level text
+            mTransitionState = 1;
             mTransitionStartTime = currentTime;
         }
     }
-    else if (mTransitionState == 1) { // Show level text
+    else if (mTransitionState == 1) {
         if (elapsedTime >= mTransitionDuration - (2 * mFadeInOutDuration)) {
-            mTransitionState = 2; // Move to fade out
+            mTransitionState = 2;
             mTransitionStartTime = currentTime;
         }
     }
-    else if (mTransitionState == 2) { // Fade out
+    else if (mTransitionState == 2) {
         if (elapsedTime >= mFadeInOutDuration) {
-            // Transition complete, reset transition state
             mIsTransitioning = false;
             
-            // Clear transition text
             if (mTransitionLabel != nullptr) {
                 mTransitionLabel->getComponent<UILabel>().SetLabelText("", "font2");
             }
             
-            // Return true to signal the transition is complete
             return true;
         }
     }
     
-    // Transition still in progress
     return false;
 }
 
@@ -101,32 +91,28 @@ void TransitionManager::renderTransition() {
     
     SDL_SetRenderDrawBlendMode(Game::renderer, SDL_BLENDMODE_BLEND);
     
-    // Calculate alpha based on transition state
     Uint8 alpha = 0;
     
-    if (mTransitionState == 0) { // Fade in
+    if (mTransitionState == 0) {
         float progress = static_cast<float>(elapsedTime) / mFadeInOutDuration;
         alpha = static_cast<Uint8>(255 * progress);
     }
-    else if (mTransitionState == 1) { // Show level text
-        alpha = 255; // Fully opaque
+    else if (mTransitionState == 1) {
+        alpha = 255;
     }
-    else if (mTransitionState == 2) { // Fade out
+    else if (mTransitionState == 2) {
         float progress = 1.0f - (static_cast<float>(elapsedTime) / mFadeInOutDuration);
         alpha = static_cast<Uint8>(255 * progress);
     }
     
-    // Fill screen with black at calculated alpha
     SDL_SetRenderDrawColor(Game::renderer, 0, 0, 0, alpha);
     SDL_Rect fullScreen = {0, 0, 1920, 1080};
     SDL_RenderFillRect(Game::renderer, &fullScreen);
     
-    // Show level text if in state 1 or 2
     if (mTransitionState >= 1 && mTransitionLabel != nullptr) {
         mTransitionLabel->draw();
     }
     
-    // Reset renderer settings
     SDL_SetRenderDrawColor(Game::renderer, 255, 255, 255, 255);
     SDL_SetRenderDrawBlendMode(Game::renderer, SDL_BLENDMODE_NONE);
 } 

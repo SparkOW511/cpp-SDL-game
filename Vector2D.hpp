@@ -33,7 +33,6 @@ class Vector2D {
         float magnitude() const;
         Vector2D normalize() const;
 
-        // Comparison operators for use in STL containers like set
         bool operator==(const Vector2D& other) const {
             return x == other.x && y == other.y;
         }

@@ -27,25 +27,20 @@ void Map::LoadMap(std::string path, int sizeX, int sizeY) {
 
     for(int y = 0; y < sizeY; y++) {
         for(int x = 0; x < sizeX; x++) {
-            // Parse tile IDs from map file
             int tileId;
             mapFile >> tileId;
             
-            // Calculate texture coordinates based on tile ID
             srcY = (tileId / 10) * tileSize;
             srcX = (tileId % 10) * tileSize;
             
-            // Add the tile
             AddTile(srcX, srcY, x * scaledSize, y * scaledSize);
             
-            // Skip comma or semicolon
             if (mapFile.peek() == ',') 
                 mapFile.ignore(1, ',');
             else if (mapFile.peek() == ';') 
                 mapFile.ignore(1, ';');
         }
         
-        // Skip to the next line
         if (mapFile.peek() == '\n' || mapFile.peek() == '\r') {
             while (mapFile.peek() == '\n' || mapFile.peek() == '\r') {
                 mapFile.ignore(1, mapFile.peek());
@@ -53,12 +48,10 @@ void Map::LoadMap(std::string path, int sizeX, int sizeY) {
         }
     }
 
-    // Read collision data - ensure colliders match the visual tiles
     for(int y = 0; y < sizeY; y++) {
         for(int x = 0; x < sizeX; x++) {
             mapFile.get(c);
             if(c == '1') {
-                // Position colliders at exact tile positions with exact size matching the scaled tiles
                 auto& tcol(manager.addEntity());
                 tcol.addComponent<ColliderComponent>("terrain", x * scaledSize, y * scaledSize, scaledSize);
                 tcol.addGroup(Game::groupColliders);

@@ -18,7 +18,6 @@ class ProjectileComponent : public Component {
             distance += speed;
 
             if(distance > range) {
-              //  std::cout << "Out of range" << std::endl;
                 entity->destroy();
             }
             else if(transform->position.x > Game::camera.x + Game::camera.w ||
@@ -26,7 +25,6 @@ class ProjectileComponent : public Component {
                     transform->position.y > Game::camera.y + Game::camera.h ||
                     transform->position.y < Game::camera.y
             ) {
-              //  std::cout << "Out of bounds" << std::endl;
                 entity->destroy();
             }
         }

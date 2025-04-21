@@ -11,10 +11,8 @@ public:
     RandomPositionManager();
     ~RandomPositionManager();
     
-    // Reset position tracking
     void resetPositions();
     
-    // Find random positions for different game elements
     Vector2D findRandomSpawnPosition(int currentLevel);
     Vector2D findRandomCluePosition(int currentLevel);
     Vector2D findRandomMagazinePosition();
@@ -22,10 +20,8 @@ public:
     Vector2D findRandomEnemyPosition();
     
 private:
-    // Random number generator
     std::mt19937 rng;
     
-    // Track used spawn positions to prevent duplicates
     std::set<Vector2D> usedCluePositions;
     std::set<Vector2D> usedMagazinePositions;
     std::set<Vector2D> usedHealthPotionPositions;

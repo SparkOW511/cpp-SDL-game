@@ -4,7 +4,6 @@
 AssetManager::AssetManager(Manager* man) : manager(man), currentMusic("") {}
 
 AssetManager::~AssetManager() {
-    // Clean up all textures
     for (auto& texture : textures) {
         if (texture.second != nullptr) {
             SDL_DestroyTexture(texture.second);
@@ -12,7 +11,6 @@ AssetManager::~AssetManager() {
     }
     textures.clear();
     
-    // Clean up all fonts
     for (auto& font : fonts) {
         if (font.second != nullptr) {
             TTF_CloseFont(font.second);
@@ -20,7 +18,6 @@ AssetManager::~AssetManager() {
     }
     fonts.clear();
     
-    // Clean up all sounds
     for (auto& sound : sounds) {
         if (sound.second != nullptr) {
             Mix_FreeChunk(sound.second);
@@ -28,7 +25,6 @@ AssetManager::~AssetManager() {
     }
     sounds.clear();
     
-    // Clean up all music
     for (auto& track : music) {
         if (track.second != nullptr) {
             Mix_FreeMusic(track.second);
@@ -71,7 +67,6 @@ TTF_Font* AssetManager::GetFont(std::string id) {
     return fonts[id];
 }
 
-// Sound functions
 void AssetManager::AddSound(std::string id, const char* path) {
     Mix_Chunk* chunk = Mix_LoadWAV(path);
     if (!chunk) {
@@ -92,24 +87,19 @@ Mix_Chunk* AssetManager::GetSound(std::string id) {
 void AssetManager::PlaySound(std::string id, int volume) {
     Mix_Chunk* sound = GetSound(id);
     if (sound) {
-        // Scale volume from 0-100 to 0-128 (SDL_mixer range)
         int scaledVolume = (volume * MIX_MAX_VOLUME) / 100;
         Mix_VolumeChunk(sound, scaledVolume);
         Mix_PlayChannel(-1, sound, 0);
     }
 }
 
-// Music functions
 void AssetManager::AddMusic(std::string id, const char* path) {
-    // Try to load the music normally first
     Mix_Music* mus = Mix_LoadMUS(path);
     
-    // If loading fails, create a dummy silent music
     if (!mus) {
         printf("Failed to load music file '%s': %s\n", path, Mix_GetError());
         printf("Creating silent placeholder music instead\n");
         
-        // Just store a null pointer - we'll handle this in PlayMusic
         music.emplace(id, nullptr);
         return;
     }
@@ -124,38 +114,31 @@ Mix_Music* AssetManager::GetMusic(std::string id) {
         printf("Music not found: %s\n", id.c_str());
         return nullptr;
     }
-    return it->second; // This can be null, but PlayMusic handles that
+    return it->second;
 }
 
 void AssetManager::PlayMusic(std::string id, int volume, int loops) {
-    // If we're already playing this music track, don't restart it
     if (currentMusic == id && Mix_PlayingMusic()) {
         return;
     }
     
-    // Stop any currently playing music
     StopMusic();
     
-    // Set the current music ID regardless of whether we can play it
     currentMusic = id;
     
-    // Get the music pointer
     Mix_Music* mus = GetMusic(id);
     if (!mus) {
         printf("Music '%s' not available - using silent placeholder\n", id.c_str());
-        return; // Just play silence
+        return;
     }
     
-    // Scale volume from 0-100 to 0-128 (SDL_mixer range)
     int scaledVolume = (volume * MIX_MAX_VOLUME) / 100;
     Mix_VolumeMusic(scaledVolume);
     
-    // Try to play the music
     int result = Mix_PlayMusic(mus, loops);
     if (result == -1) {
         printf("Failed to play music '%s': %s\n", id.c_str(), Mix_GetError());
         
-        // Check if the error is related to MP3 files
         std::string error = Mix_GetError();
         if (error.find("MP3") != std::string::npos || 
             error.find("mp3") != std::string::npos ||
@@ -190,13 +173,10 @@ void AssetManager::ResumeMusic() {
 }
 
 void AssetManager::SetMasterVolume(int volume) {
-    // Scale volume from 0-100 to 0-128 (SDL_mixer range)
     int scaledVolume = (volume * MIX_MAX_VOLUME) / 100;
     
-    // Set music volume
     Mix_VolumeMusic(scaledVolume);
     
-    // Set volume for all sound effects
     for (auto& sound : sounds) {
         if (sound.second) {
             Mix_VolumeChunk(sound.second, scaledVolume);

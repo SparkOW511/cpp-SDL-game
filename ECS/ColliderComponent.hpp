@@ -20,7 +20,6 @@ class ColliderComponent : public Component {
 
     ColliderComponent(std::string t){
         tag = t;
-        // Dimensions will be set from transform in init
         collider.w = collider.h = 0;
         offsetX = 0;
         offsetY = 0;
@@ -38,10 +37,10 @@ class ColliderComponent : public Component {
 
     ColliderComponent(std::string t, int w, int h, int offX, int offY) {
         tag = t;
-        collider.w = w; // Use provided width
-        collider.h = h; // Use provided height
-        offsetX = offX; // Use provided offset X
-        offsetY = offY; // Use provided offset Y
+        collider.w = w;
+        collider.h = h;
+        offsetX = offX;
+        offsetY = offY;
         tex = nullptr;
     }
 
@@ -58,16 +57,13 @@ class ColliderComponent : public Component {
         }
         transform = &entity->getComponent<TransformComponent>();
         
-        // If collider dimensions weren't set by a specific constructor, get them from transform
         if (collider.w == 0 && collider.h == 0 && tag != "terrain") {
              collider.w = transform->width * transform->scale;
              collider.h = transform->height * transform->scale;
-             // Ensure offsets are 0 if using transform dimensions
              offsetX = 0;
              offsetY = 0;
         }
 
-        // Set initial position based on transform and potentially provided offsets
         if (tag != "terrain") {
             collider.x = static_cast<int>(transform->position.x) + offsetX;
             collider.y = static_cast<int>(transform->position.y) + offsetY;
@@ -91,7 +87,6 @@ class ColliderComponent : public Component {
     }
 
     void draw() override {
-        // Make colliders visible for debugging
         // TextureManager::Draw(tex, srcR, destR, SDL_FLIP_NONE);
     }
 };

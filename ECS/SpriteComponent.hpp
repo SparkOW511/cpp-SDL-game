@@ -18,10 +18,8 @@ class SpriteComponent : public Component {
         int frames = 0;
         int speed = 100;
         
-        // Alpha value for opacity (0-255)
         Uint8 alpha = 255;
         
-        // Flag to determine if this is a clue (for proximity-based opacity)
         bool isClue = false;
 
     public:
@@ -36,10 +34,9 @@ class SpriteComponent : public Component {
             textureID = id;
             setTex(id);
             
-            // Set clue flag if this is a clue
             if (id == "clue") {
                 isClue = true;
-                alpha = 0; // Start fully transparent
+                alpha = 0;
             }
         }
 
@@ -77,10 +74,9 @@ class SpriteComponent : public Component {
 
             setTex(id);
             
-            // Set clue flag if this is a clue
             if (id == "clue") {
                 isClue = true;
-                alpha = 0; // Start fully transparent
+                alpha = 0;
                 if (animated) {
                     Play("Clue");
                 }
@@ -123,29 +119,23 @@ class SpriteComponent : public Component {
             destRect.w = transform->width * transform->scale;
             destRect.h = transform->height * transform->scale;
             
-            // Update alpha for clues based on player proximity if player exists
             if (isClue && player != nullptr) {
-                // Calculate distance between player and clue
                 Vector2D playerPos = player->getComponent<TransformComponent>().position;
                 Vector2D cluePos = transform->position;
                 
-                // Calculate Euclidean distance
                 float distance = sqrt(
                     pow(playerPos.x - cluePos.x, 2) + 
                     pow(playerPos.y - cluePos.y, 2)
                 );
                 
-                // Define maximum and minimum distances for visibility
-                const float MAX_VISIBLE_DISTANCE = 1000.0f; // Fully invisible beyond this distance
-                const float MIN_VISIBLE_DISTANCE = 200.0f; // Fully visible at this distance
+                const float MAX_VISIBLE_DISTANCE = 1000.0f;
+                const float MIN_VISIBLE_DISTANCE = 200.0f;
                 
-                // Calculate alpha based on distance (inverse relationship)
                 if (distance >= MAX_VISIBLE_DISTANCE) {
-                    alpha = 0; // Fully transparent if too far
+                    alpha = 0;
                 } else if (distance <= MIN_VISIBLE_DISTANCE) {
-                    alpha = 255; // Fully opaque if close enough
+                    alpha = 255;
                 } else {
-                    // Linear interpolation between 0 and 255 based on distance
                     alpha = static_cast<Uint8>(255 * (1.0f - (distance - MIN_VISIBLE_DISTANCE) / (MAX_VISIBLE_DISTANCE - MIN_VISIBLE_DISTANCE)));
                 }
             }

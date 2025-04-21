@@ -2,12 +2,10 @@
 #include "Game.hpp"
 
 RandomPositionManager::RandomPositionManager() {
-    // Initialize random number generator with time-based seed
     rng.seed(static_cast<unsigned int>(std::time(nullptr)));
 }
 
 RandomPositionManager::~RandomPositionManager() {
-    // No dynamic memory to clean up
 }
 
 void RandomPositionManager::resetPositions() {
@@ -18,9 +16,7 @@ void RandomPositionManager::resetPositions() {
 }
 
 Vector2D RandomPositionManager::findRandomSpawnPosition(int currentLevel) {
-    // Different spawn points based on level
     if (currentLevel == 1) {
-        // Random spawns for level 1
         const std::vector<Vector2D> spawnPoints = {
             {8*64, 6*64},
             {12*64, 18*64},
@@ -39,41 +35,34 @@ Vector2D RandomPositionManager::findRandomSpawnPosition(int currentLevel) {
         return spawnPoints[idx];
     } 
     else if (currentLevel == 2) {
-        // Level 2: Spawn player at the bottom center of the map
-        return {30*64, 30*64}; // Position player at the bottom center of the map
+        return {30*64, 30*64};
     }
     else if (currentLevel == 3) {
-        // Level 3: Spawn player at position marked with 5 in the map
         return {30*64, 31*64};
     }
     else if (currentLevel == 4) {
-        // Level 4: Fixed player position from map data (1)
-        return {34*64, 32*64}; // Player spawn at (34,33)
+        return {34*64, 32*64};
     }
     
-    // Default fallback if level is not recognized
     return {15*64, 15*64};
 }
 
 Vector2D RandomPositionManager::findRandomCluePosition(int currentLevel) {
     std::vector<Vector2D> cluePoints;
     
-    // Use different spawn positions based on the current level
     if (currentLevel == 1) {
-        // Level 1 clue positions
         cluePoints = {
             {10*64, 3*64},
             {8*64, 13*64},
             {18*64, 7*64},
             {17*64, 24*64},
             {22*64, 17*64},
-            {32*64, 25*64}, // Fixed position
+            {32*64, 25*64},
             {46*64, 2*64},
             {30*64, 6*64}
         };
     } 
     else if (currentLevel == 2) {
-        // Level 2 clue positions (number 3 from map)
         cluePoints = {
             {39*64, 1*64},
             {14*64, 3*64},
@@ -90,7 +79,6 @@ Vector2D RandomPositionManager::findRandomCluePosition(int currentLevel) {
         };
     }
     else if (currentLevel == 3) {
-        // Level 3 clue positions (number 3 from map)
         cluePoints = {
             {9*64, 2*64},
             {22*64, 2*64},
@@ -111,7 +99,6 @@ Vector2D RandomPositionManager::findRandomCluePosition(int currentLevel) {
         };
     }
     
-    // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
     for (const auto& pos : cluePoints) {
         if (usedCluePositions.find(pos) == usedCluePositions.end()) {
@@ -119,19 +106,16 @@ Vector2D RandomPositionManager::findRandomCluePosition(int currentLevel) {
         }
     }
     
-    // If all positions are used, return a fallback position
     if (availablePositions.empty()) {
         if (currentLevel == 1) return Vector2D{10*64, 3*64};
         else if (currentLevel == 2) return Vector2D{24*64, 3*64};
         else if (currentLevel == 3) return Vector2D{10*64, 5*64};
-        else return Vector2D{10*64, 3*64}; // Default fallback
+        else return Vector2D{10*64, 3*64};
     }
     
-    // Select a random available position
     int idx = rng() % availablePositions.size();
     Vector2D selectedPos = availablePositions[idx];
     
-    // Mark position as used
     usedCluePositions.insert(selectedPos);
     
     return selectedPos;
@@ -140,11 +124,9 @@ Vector2D RandomPositionManager::findRandomCluePosition(int currentLevel) {
 Vector2D RandomPositionManager::findRandomMagazinePosition() {
     std::vector<Vector2D> magazinePoints;
     
-    // Check current level
     int currentLevel = Game::currentLevel;
     
     if (currentLevel == 1) {
-        // Level 1 magazine positions
         magazinePoints = {
             {8*64, 3*64},
             {19*64, 2*64},
@@ -158,7 +140,6 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
         };
     } 
     else if (currentLevel == 2) {
-        // Level 2 magazine positions (number 1 from map)
         magazinePoints = {
             {15*64, 1*64},
             {7*64, 2*64},
@@ -187,7 +168,6 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
         };
     }
     else if (currentLevel == 3) {
-        // Level 3 magazine positions (number 1 from map)
         magazinePoints = {
             {33*64, 2*64},
             {7*64, 4*64},
@@ -216,19 +196,17 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
         };
     }
     else if (currentLevel == 4) {
-        // Level 4 magazine positions (number 2 from map)
         magazinePoints = {
-            {34*64, 9*64},   // (34,9)
-            {43*64, 13*64},  // (43,13)
-            {24*64, 15*64},  // (24,15)
-            {23*64, 21*64},  // (24,21)
-            {39*64, 20*64},  // (39,20)
-            {24*64, 26*64},  // (24,26)
-            {42*64, 21*64}   // (42,21)
+            {34*64, 9*64},
+            {43*64, 13*64},
+            {24*64, 15*64},
+            {23*64, 21*64},
+            {39*64, 20*64},
+            {24*64, 26*64},
+            {42*64, 21*64}
         };
     }
     
-    // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
     for (const auto& pos : magazinePoints) {
         if (usedMagazinePositions.find(pos) == usedMagazinePositions.end()) {
@@ -236,20 +214,17 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
         }
     }
     
-    // If all positions are used, return a fallback position
     if (availablePositions.empty()) {
         if (currentLevel == 1) return Vector2D{8*64, 3*64};
         else if (currentLevel == 2) return Vector2D{0*64, 3*64};
         else if (currentLevel == 3) return Vector2D{8*64, 3*64};
         else if (currentLevel == 4) return Vector2D{34*64, 9*64};
-        else return Vector2D{8*64, 3*64}; // Default fallback
+        else return Vector2D{8*64, 3*64};
     }
     
-    // Select a random available position
     int idx = rng() % availablePositions.size();
     Vector2D selectedPos = availablePositions[idx];
     
-    // Mark position as used
     usedMagazinePositions.insert(selectedPos);
     
     return selectedPos;
@@ -258,11 +233,9 @@ Vector2D RandomPositionManager::findRandomMagazinePosition() {
 Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
     std::vector<Vector2D> potionPoints;
     
-    // Use different positions based on level
     int currentLevel = Game::currentLevel;
     
     if (currentLevel == 1) {
-        // Level 1 potion positions
         potionPoints = {
             {9*64, 9*64},
             {16*64, 16*64},
@@ -275,7 +248,6 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
         };
     } 
     else if (currentLevel == 2) {
-        // Level 2 health potion positions (number 4 from map)
         potionPoints = {
             {2*64, 3*64},
             {11*64, 1*64},
@@ -302,7 +274,6 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
         };
     }
     else if (currentLevel == 3) {
-        // Level 3 health potion positions (number 4 from map)
         potionPoints = {
             {17*64, 1*64},
             {59*64, 2*64},
@@ -332,21 +303,19 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
         };
     }
     else if (currentLevel == 4) {
-        // Level 4 health potion positions (number 3 from map)
         potionPoints = {
-            {24*64, 11*64},   // (24,11)
-            {43*64, 10*64},   // (43,10)
-            {29*64, 16*64},   // (29,16)
-            {42*64, 16*64},   // (42,16)
-            {24*64, 21*64},   // (24,21)
-            {34*64, 21*64},   // (34,21)
-            {39*64, 25*64},   // (39,25)
-            {43*64, 25*64},   // (43,25)
-            {29*64, 23*64}    // (29,23)
+            {24*64, 11*64},
+            {43*64, 10*64},
+            {29*64, 16*64},
+            {42*64, 16*64},
+            {24*64, 21*64},
+            {34*64, 21*64},
+            {39*64, 25*64},
+            {43*64, 25*64},
+            {29*64, 23*64}
         };
     }
     
-    // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
     for (const auto& pos : potionPoints) {
         if (usedHealthPotionPositions.find(pos) == usedHealthPotionPositions.end()) {
@@ -354,20 +323,17 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
         }
     }
     
-    // If all positions are used, return a fallback position
     if (availablePositions.empty()) {
         if (currentLevel == 1) return Vector2D{9*64, 9*64};
         else if (currentLevel == 2) return Vector2D{1*64, 0*64};
         else if (currentLevel == 3) return Vector2D{5*64, 6*64};
         else if (currentLevel == 4) return Vector2D{24*64, 11*64};
-        else return Vector2D{9*64, 9*64}; // Default fallback
+        else return Vector2D{9*64, 9*64};
     }
     
-    // Select a random available position
     int idx = rng() % availablePositions.size();
     Vector2D selectedPos = availablePositions[idx];
     
-    // Mark position as used
     usedHealthPotionPositions.insert(selectedPos);
     
     return selectedPos;
@@ -376,11 +342,9 @@ Vector2D RandomPositionManager::findRandomHealthPotionPosition() {
 Vector2D RandomPositionManager::findRandomEnemyPosition() {
     std::vector<Vector2D> enemyPoints;
     
-    // Different enemy positions based on level
     int currentLevel = Game::currentLevel;
     
     if (currentLevel == 1) {
-        // Level 1 enemy positions
         enemyPoints = {
             {12*64, 4*64},
             {10*64, 13*64},
@@ -392,7 +356,6 @@ Vector2D RandomPositionManager::findRandomEnemyPosition() {
         };
     } 
     else if (currentLevel == 2) {
-        // Level 2 enemy positions (number 2 from map)
         enemyPoints = {
             {24*64, 0*64},
             {33*64, 1*64},
@@ -417,7 +380,6 @@ Vector2D RandomPositionManager::findRandomEnemyPosition() {
         };
     }
     else if (currentLevel == 3) {
-        // Level 3 enemy positions (number 2 from map)
         enemyPoints = {
             {45*64, 3*64},
             {52*64, 4*64},
@@ -445,16 +407,14 @@ Vector2D RandomPositionManager::findRandomEnemyPosition() {
         };
     }
     else if (currentLevel == 4) {
-        // Level 4 enemy positions (number 5 from map)
         enemyPoints = {
-            {30*64, 12*64},  // (30,12)
-            {38*64, 12*64},  // (38,12)
-            {30*64, 17*64},  // (30,17)
-            {38*64, 17*64}   // (38,17)
+            {30*64, 12*64},
+            {38*64, 12*64},
+            {30*64, 17*64},
+            {38*64, 17*64}
         };
     }
     
-    // Create a list of available positions (not used yet)
     std::vector<Vector2D> availablePositions;
     for (const auto& pos : enemyPoints) {
         if (usedEnemyPositions.find(pos) == usedEnemyPositions.end()) {
@@ -462,20 +422,17 @@ Vector2D RandomPositionManager::findRandomEnemyPosition() {
         }
     }
     
-    // If all positions are used, return a fallback position
     if (availablePositions.empty()) {
         if (currentLevel == 1) return Vector2D{12*64, 4*64};
         else if (currentLevel == 2) return Vector2D{9*64, 3*64};
         else if (currentLevel == 3) return Vector2D{12*64, 4*64};
         else if (currentLevel == 4) return Vector2D{30*64, 12*64};
-        else return Vector2D{12*64, 4*64}; // Default fallback
+        else return Vector2D{12*64, 4*64};
     }
     
-    // Select a random available position
     int idx = rng() % availablePositions.size();
     Vector2D selectedPos = availablePositions[idx];
     
-    // Mark position as used
     usedEnemyPositions.insert(selectedPos);
     
     return selectedPos;
