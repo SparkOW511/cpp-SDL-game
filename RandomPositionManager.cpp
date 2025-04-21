@@ -48,7 +48,7 @@ Vector2D RandomPositionManager::findRandomSpawnPosition(int currentLevel) {
     }
     else if (currentLevel == 4) {
         // Level 4: Fixed player position from map data (1)
-        return {34*64, 33*64}; // Player spawn at (34,33)
+        return {34*64, 32*64}; // Player spawn at (34,33)
     }
     
     // Default fallback if level is not recognized

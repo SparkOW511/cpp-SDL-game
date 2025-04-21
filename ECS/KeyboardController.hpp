@@ -9,7 +9,6 @@ class KeyboardController : public Component {
         TransformComponent *transform;
         SpriteComponent *sprite;
         AmmoComponent *ammo;
-        char playerInput;
         Uint32 lastShotTime;
         const Uint32 shotCooldown = 350;
         const Uint32 shotAnimationDuration = 350; // Time for shot animation to complete
@@ -20,7 +19,6 @@ class KeyboardController : public Component {
         SDL_RendererFlip bulletFlip;
         SDL_RendererFlip playerFlip;
         const char* direction;
-        const char* playerDirection;
         const char* lastPlayerDirection;  // Track last shoot animation direction
         bool isMoving;
         bool isShooting; // Track if player is shooting
@@ -56,7 +54,6 @@ class KeyboardController : public Component {
             wasShooting = false;
             facingUp = false;
             facingDown = false;
-            playerDirection = "Idle";
             lastPlayerDirection = "Idle";
             previousGameState = Game::gameState;
             wasMouseButtonDown = false;
@@ -189,7 +186,6 @@ class KeyboardController : public Component {
                 bulletFlip = SDL_FLIP_NONE;
                 playerFlip = SDL_FLIP_NONE; // Always face right when shooting right
                 direction = "bulletHorizontal";
-                playerDirection = "Shoot";
                 lastPlayerDirection = "Shoot";
             }
             else if (angle >= 45.0f && angle < 135.0f) {
@@ -198,9 +194,8 @@ class KeyboardController : public Component {
                 velY = 3;
                 offsetY = 30;
                 offsetX = 50; // Center offset
-                bulletFlip = SDL_FLIP_HORIZONTAL;
+                bulletFlip = SDL_FLIP_VERTICAL;
                 direction = "bulletVertical";
-                playerDirection = "ShootDown";
                 lastPlayerDirection = "ShootDown";
                 // For vertical shooting, never flip the sprite
                 sprite->SetFlip(SDL_FLIP_NONE);
@@ -214,7 +209,6 @@ class KeyboardController : public Component {
                 bulletFlip = SDL_FLIP_HORIZONTAL;
                 playerFlip = SDL_FLIP_HORIZONTAL; // Always face left when shooting left
                 direction = "bulletHorizontal";
-                playerDirection = "Shoot";
                 lastPlayerDirection = "Shoot";
             }
             else {
@@ -225,7 +219,6 @@ class KeyboardController : public Component {
                 offsetX = 50; // Center offset
                 bulletFlip = SDL_FLIP_NONE;
                 direction = "bulletVertical";
-                playerDirection = "ShootUp";
                 lastPlayerDirection = "ShootUp";
                 // For vertical shooting, never flip the sprite
                 sprite->SetFlip(SDL_FLIP_NONE);

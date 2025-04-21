@@ -32,6 +32,11 @@ class EnemyAIComponent : public Component {
             moveSpeed = speed;
         }
 
+        // Set the chase range of the enemy
+        void setChaseRange(float range) {
+            chaseRange = range;
+        }
+
         void init() override {
             transform = &entity->getComponent<TransformComponent>();
             sprite = &entity->getComponent<SpriteComponent>();

@@ -30,7 +30,8 @@ enum GameState {
     STATE_SETTINGS,
     STATE_GAME_OVER,
     STATE_END_SCREEN,
-    STATE_REPLAY // Added replay state
+    STATE_REPLAY, // Added replay state
+    STATE_LEADERBOARD // Added leaderboard state
 };
 
 // Menu item enumeration
@@ -117,6 +118,13 @@ class Game {
         void renderSettingsMenu();
         void applySettings();
 
+        // Leaderboard methods
+        void initLeaderboard();
+        void renderLeaderboard();
+        void updateLeaderboard();
+        void saveToLeaderboard(const std::string& playerName, Uint32 gameTime);
+        void promptPlayerName();
+
         static SDL_Renderer *renderer;
         static SDL_Event event;
         static bool isRunning;
@@ -141,7 +149,6 @@ class Game {
         static bool finalBossDefeated;       // Tracks if the final boss has been defeated
         static bool scientistRescued;        // Tracks if the scientist has been rescued
         static bool canRescueScientist;      // Tracks if player can interact with scientist
-        static bool needsRestart;            // Flag to indicate game needs restart
         static bool returnToMainMenu;        // Flag to indicate return to main menu
         static bool hasSavedDuringExitInstructions; // Flag to track if game was saved during exit instructions
         static std::string savedExitInstructionsText; // Store original exit instructions text
@@ -193,7 +200,7 @@ class Game {
         SDL_Color yellow = {255, 255, 0, 255}; // Color for selected menu items
         
         bool isAnswerCorrect = false;         // Was the last answer correct
-        const Uint32 feedbackDuration = 1500; // How long to show feedback (1.5 seconds)
+        const Uint32 feedbackDuration = 800; // How long to show feedback (0.8 seconds)
         
         // Main menu entities
         Entity* menuTitle = nullptr;
@@ -296,5 +303,16 @@ class Game {
 
         // Add a variable to track where to return from settings
         GameState previousState = STATE_MAIN_MENU; // Default to main menu
+
+        // Player name for leaderboard
+        std::string playerName = "";
+        bool waitingForPlayerName = false;
+        bool shouldSaveToLeaderboard = false;
+        std::vector<std::pair<std::string, std::string>> leaderboardEntries; // player name, formatted time
+        
+        // Leaderboard entities
+        Entity* leaderboardTitle = nullptr;
+        Entity* leaderboardEntryLabels[5] = {nullptr}; // For the 5 entries
+        Entity* leaderboardBackButton = nullptr;
 };
 #endif

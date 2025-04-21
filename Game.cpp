@@ -71,7 +71,6 @@ bool Game::level4MapChanged = false;
 bool Game::finalBossDefeated = false;
 bool Game::scientistRescued = false;
 bool Game::canRescueScientist = false;
-bool Game::needsRestart = false;
 bool Game::returnToMainMenu = false;
 Uint32 Game::gameStartTime = 0;
 Uint32 Game::gameplayTime = 0;
@@ -340,6 +339,7 @@ void Game::initEntities() {
         finalBoss->addComponent<HealthComponent>(500); // Much more health
         finalBoss->addComponent<EnemyAIComponent>(manager);
         finalBoss->getComponent<EnemyAIComponent>().setSpeed(0.5f); // Slower but stronger
+        finalBoss->getComponent<EnemyAIComponent>().setChaseRange(400.0f); // Double chase range for boss
         finalBoss->addGroup(Game::groupEnemies);
         
         // Create the scientist at position (35,5)
@@ -511,8 +511,9 @@ void Game::handleEvents()
                                 initSettingsMenu();
                                 break;
                             case MENU_LEADERBOARD:
-                                // Leaderboard function currently does nothing
-                                // Will be implemented later
+                                // Initialize and display the leaderboard
+                                initLeaderboard();
+                                gameState = STATE_LEADERBOARD;
                                 break;
                             case MENU_EXIT:
                                 isRunning = false;
@@ -605,9 +606,8 @@ void Game::handleEvents()
                                 saveGame(); // Save game (stub)
                                 break;
                             case PAUSE_RESTART:
-                                // Set restart flag and unpause
-                                needsRestart = true;
-                                gameState = STATE_GAME;
+                                // Call restart function directly instead of setting needsRestart flag
+                                restart();
                                 break;
                             case PAUSE_SETTINGS:
                                 // Go to settings menu
@@ -680,38 +680,9 @@ void Game::handleEvents()
                     case SDLK_SPACE:
                         // Handle selection directly
                         if (selectedEndOption == END_RESTART) {
-                            // Set variables for restart
-                            gameOver = false;
-                            playerWon = false;
-                            collectedClues = 0;
-                            damageTimer = 1.0f;
-                            objectCollisionDelay = 1.0f;
-                            objectCollisionsEnabled = false;
-                            questionActive = false;
-                            pendingClueEntity = nullptr;
-                            showFeedback = false;
-                            showingExitInstructions = false; // Reset exit instructions flag
-                            level4MapChanged = false; // Reset level 4 map state
-                            finalBossDefeated = false; // Reset final boss state
-                            scientistRescued = false; // Reset scientist state
-                            canRescueScientist = false; // Reset scientist interaction flag
-                            currentLevel = 1;
-                            
-                            // Reset used questions
-                            resetUsedQuestions();
-                            
-                            // Set clue count for level 1
-                            totalClues = 3;
-                            
-                            // Reset position tracking
-                            positionManager.resetPositions();
-                            
-                            // Reset gameplay timer
-                            gameStartTime = SDL_GetTicks();
-                            gameplayTime = 0;
-                            
-                            // Set flag for deferred restart
-                            needsRestart = true;
+                            restart(); // Call restart function directly
+                        } else if (selectedEndOption == END_REPLAY) {
+                            replay(); // Call replay function
                         } else if (selectedEndOption == END_MAIN_MENU) {
                             // Set flag for deferred return to main menu
                             returnToMainMenu = true;
@@ -721,6 +692,25 @@ void Game::handleEvents()
                         // Go to main menu directly
                         returnToMainMenu = true;
                         break;
+                }
+            }
+            else if (gameState == STATE_LEADERBOARD) {
+                if (event.key.keysym.sym == SDLK_ESCAPE || 
+                    event.key.keysym.sym == SDLK_RETURN || 
+                    event.key.keysym.sym == SDLK_SPACE) {
+                    // Return to main menu
+                    gameState = STATE_MAIN_MENU;
+                    
+                    // Clean up leaderboard UI
+                    if (leaderboardTitle) leaderboardTitle->destroy();
+                    for (auto& label : leaderboardEntryLabels) {
+                        if (label) label->destroy();
+                        label = nullptr;
+                    }
+                    if (leaderboardBackButton) leaderboardBackButton->destroy();
+                    
+                    // Re-init main menu
+                    initMainMenu();
                 }
             }
             break;
@@ -983,6 +973,12 @@ void Game::handleEvents()
                     }
                 }
             }
+            else if (gameState == STATE_LEADERBOARD) {
+                // Handle hover for back button
+                if (leaderboardBackButton && leaderboardBackButton->hasComponent<UILabel>()) {
+                    leaderboardBackButton->getComponent<UILabel>().HandleEvent(event);
+                }
+            }
             break;
             
         case SDL_MOUSEBUTTONDOWN:
@@ -1089,6 +1085,12 @@ void Game::handleEvents()
                     endMenuButton->getComponent<UILabel>().HandleEvent(event);
                 }
             }
+            else if (gameState == STATE_LEADERBOARD) {
+                // Handle click on back button
+                if (leaderboardBackButton && leaderboardBackButton->hasComponent<UILabel>()) {
+                    leaderboardBackButton->getComponent<UILabel>().HandleEvent(event);
+                }
+            }
             break;
             
         case SDL_MOUSEBUTTONUP:
@@ -1104,39 +1106,11 @@ void Game::handleEvents()
 
 void Game::update()
 {
-    // --- START POST-LOAD DEBUGGING ---
-    // --- END POST-LOAD DEBUGGING ---
-
     Uint32 currentTime = SDL_GetTicks();
     float deltaTime = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
     
-    // Handle deferred restart and main menu return
-    if (needsRestart) {
-        needsRestart = false; // Reset flag
-        
-        // Clean up game entities
-        if (map != nullptr) {
-            delete map;
-            map = nullptr;
-        }
-        
-        // Clear all entities including UI
-        manager.clear();
-        
-        // Set game state
-        gameState = STATE_GAME;
-        
-        // Load first level
-        loadLevel(currentLevel);
-        
-        // Reinitialize all game entities
-        initEntities();
-        
-        // Return early to avoid processing other game logic
-        return;
-    }
-    
+    // Handle deferred main menu return (keeping this logic)
     if (returnToMainMenu) {
         returnToMainMenu = false; // Reset flag
         
@@ -1229,10 +1203,12 @@ void Game::update()
         case STATE_REPLAY:
             // Update replay ONLY
             updateReplay();
-            // Skip manager.refresh() and manager.update() for replay state
-            // Refresh is not needed as replay handles its entity directly
-            // Update is skipped to prevent interference with replay positioning
             break; 
+            
+        case STATE_LEADERBOARD:
+            // Update leaderboard elements
+            updateLeaderboard();
+            break;
             
         case STATE_GAME:
             // Always refresh entity manager first in GAME state
@@ -1310,444 +1286,442 @@ void Game::update()
                     transitionManager.mTransitionLabel = transitionLabel;
                     transitionManager.init(this, &manager);
                 }
-        return;
-    }
-    
-    // Handle animations for all entities regardless of game state
-    for(auto& p : *players) {
-        if (p->hasComponent<SpriteComponent>()) {
-            p->getComponent<SpriteComponent>().update();
-        }
-    }
-    
-    for(auto& e : *enemies) {
-        // Add safety check for null or inactive enemy pointers
-        if (!e || !e->isActive()) {
-            continue; 
-        }
-
-        // Check and update SpriteComponent
-        if (e->hasComponent<SpriteComponent>()) {
-            try {
-                 e->getComponent<SpriteComponent>().update();
-            } catch (const std::exception& ex) {
-                 // Keep try/catch? User didn't specify. Keep for now.
-                 std::cerr << "Exception during SpriteComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
-            } catch (...) {
-                 std::cerr << "Unknown exception during SpriteComponent::update()." << std::endl; // Keep non-debug error
+                return;
             }
-        } else {
-        }
-
-        // Check and update EnemyAIComponent or set Idle animation
-        if (!questionActive && !gameOver) {
-            if (e->hasComponent<EnemyAIComponent>()) {
-                 // ---> ADD PLAYER CHECK HERE <---
-                 if (!player || !player->isActive()) {
-                 } else {
-                    try {
-                        e->getComponent<EnemyAIComponent>().update();
-                    } catch (const std::exception& ex) {
-                        std::cerr << "Exception during EnemyAIComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
-                    } catch (...) {
-                        std::cerr << "Unknown exception during EnemyAIComponent::update()." << std::endl; // Keep non-debug error
-                    }
-                 }
-            } else {
-            }
-        } else if (e->hasComponent<SpriteComponent>()) {
-            try {
-                e->getComponent<SpriteComponent>().Play("Idle");
-            } catch (const std::exception& ex) {
-                 std::cerr << "Exception during SpriteComponent::Play('Idle'): " << ex.what() << std::endl; // Keep non-debug error
-            } catch (...) {
-                 std::cerr << "Unknown exception during SpriteComponent::Play('Idle')." << std::endl; // Keep non-debug error
-            }
-        }
-    }
     
-    for(auto& p : *projectiles) {
-        if (p->hasComponent<SpriteComponent>()) {
-            p->getComponent<SpriteComponent>().update();
-        }
-    }
-    
-    for(auto& o : *objects) {
-        if(o->hasComponent<SpriteComponent>()) {
-            o->getComponent<SpriteComponent>().update();
-        }
-    }
-    
-    // Only update player-related UI if the player exists and game is not over
-    if (player != nullptr && player->isActive() && !gameOver) {
-        // Keep game state updated for UI elements
-        int health = player->getComponent<HealthComponent>().health;
-        std::stringstream healthSS;
-        healthSS << "Health: " << health;
-        healthbar->getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
-        
-        int ammo = player->getComponent<AmmoComponent>().currentAmmo;
-        std::stringstream ammoSS;
-        ammoSS << "Ammo: " << ammo;
-        ammobar->getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
-
-        std::stringstream clueSS;
-        clueSS << "Clues: " << collectedClues << "/" << totalClues;
-        clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
-    }
-
-    // Check if feedback timer has expired
-    if (showFeedback) {
-        // For regular feedback from questions
-        if (!showingExitInstructions && (currentTime - feedbackStartTime > 1500)) {
-            closeQuestion();
-        } 
-        // For exit instructions, keep visible until player reaches exit
-        // Don't hide the "head north" message
-    }
-
-    // If game is in question mode or game over, skip gameplay logic but continue animations
-    if (questionActive || gameOver) {
-        // Ensure player doesn't move during questions if player exists
-        if (questionActive && player != nullptr && player->isActive() && 
-            player->hasComponent<TransformComponent>()) {
-            player->getComponent<TransformComponent>().velocity.x = 0;
-            player->getComponent<TransformComponent>().velocity.y = 0;
-        }
-        return;
-    }
-    
-    // Run manager update ONLY for STATE_GAME when not paused/game over
-    manager.update();
-    
-    // Continue with regular game update logic - only if player exists
-    if (player != nullptr && player->isActive() && gameState == STATE_GAME) {
-        Vector2D playerPos = player->getComponent<TransformComponent>().position;
-        
-        // Get updated player position after manager.update()
-        TransformComponent& playerTransform = player->getComponent<TransformComponent>();
-        
-        // Define world boundaries
-        int worldWidth = 60 * 32 * 2;  // Assuming map size based on Map::LoadMap usage
-        int worldHeight = 34 * 32 * 2;
-        
-        // Player dimensions
-        int playerWidth = playerTransform.width * playerTransform.scale;
-        int playerHeight = playerTransform.height * playerTransform.scale;
-        
-        // Clamp player position to world boundaries
-        if (playerTransform.position.x < 0) {
-            playerTransform.position.x = 0;
-        }
-        if (playerTransform.position.y < 0) {
-            playerTransform.position.y = 0;
-        }
-        if (playerTransform.position.x + playerWidth > worldWidth) {
-            playerTransform.position.x = worldWidth - playerWidth;
-        }
-        if (playerTransform.position.y + playerHeight > worldHeight) {
-            playerTransform.position.y = worldHeight - playerHeight;
-        }
-
-        // Update player collider after potential position clamping
-        player->getComponent<ColliderComponent>().update();
-        SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
-        
-        damageTimer -= 1.0f/60.0f;
-        
-        if (!objectCollisionsEnabled) {
-            objectCollisionDelay -= 1.0f/60.0f;
-            if (objectCollisionDelay <= 0.0f) {
-                objectCollisionsEnabled = true;
-            }
-        }
-
-        // Handle object collisions
-        if (objectCollisionsEnabled) {
-            for (auto& o : *objects) {
-                // if (!o || !o->isActive()) continue; // Basic safety check - Keep? Seems reasonable.
-                if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
-                                o->getComponent<ColliderComponent>().collider)) {
-                    if (o->getComponent<ColliderComponent>().tag == "clue") {
-                        showQuestion(o);
-                    }
-                    else if (o->getComponent<ColliderComponent>().tag == "magazine") {
-                        player->getComponent<AmmoComponent>().addAmmo();
-                        o->destroy();
-                    }
-                    else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
-                        player->getComponent<HealthComponent>().heal(20);
-                        o->destroy();
-                    }
+            // Handle animations for all entities regardless of game state
+            for(auto& p : *players) {
+                if (p->hasComponent<SpriteComponent>()) {
+                    p->getComponent<SpriteComponent>().update();
                 }
             }
-        }
-
-        // Player collision with terrain
-        for(auto& c : *colliders) {
-            SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
-            SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider; // Get player collider AFTER movement
             
-            if(Collision::AABB(cCol, updatedPlayerCol)) {
-                // Calculate overlap
-                float overlapX = 0.0f;
-                float overlapY = 0.0f;
-
-                // Calculate the distance between centers
-                float dx = (updatedPlayerCol.x + updatedPlayerCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
-                float dy = (updatedPlayerCol.y + updatedPlayerCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
-
-                // Calculate the minimum non-overlapping distances
-                float combinedHalfWidths = (updatedPlayerCol.w / 2.0f) + (cCol.w / 2.0f);
-                float combinedHalfHeights = (updatedPlayerCol.h / 2.0f) + (cCol.h / 2.0f);
-
-                // Calculate overlap on each axis
-                overlapX = combinedHalfWidths - std::abs(dx);
-                overlapY = combinedHalfHeights - std::abs(dy);
-
-                // Resolve collision based on the axis with the smallest overlap
-                if (overlapX < overlapY) {
-                    // Push horizontally
-                    if (dx > 0) { // Player is to the right of collider
-                        playerTransform.position.x += overlapX;
-                    } else { // Player is to the left of collider
-                        playerTransform.position.x -= overlapX;
-                    }
-                    // playerTransform.velocity.x = 0; // REMOVED: Allow input to control velocity
-                } else {
-                    // Push vertically
-                    if (dy > 0) { // Player is below collider
-                        playerTransform.position.y += overlapY;
-                    } else { // Player is above collider
-                        playerTransform.position.y -= overlapY;
-                    }
-                    // playerTransform.velocity.y = 0; // REMOVED: Allow input to control velocity
-                }
-
-                // Update player's collider component immediately after position change
-                player->getComponent<ColliderComponent>().update(); 
-            }
-        }
-
-        // Enemy collision with projectiles and player
-        for(auto& e : *enemies) {
-            // Enemy needs access to its transform for collision response
-            TransformComponent& enemyTransform = e->getComponent<TransformComponent>();
-
-            // --- Enemy Terrain Collision Check ---
-            for (auto& c : *colliders) {
-                SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
-                SDL_Rect enemyCol = e->getComponent<ColliderComponent>().collider; // Get enemy collider AFTER its movement
-
-                if (Collision::AABB(cCol, enemyCol)) {
-                    // Calculate overlap (similar to player)
-                    float overlapX = 0.0f;
-                    float overlapY = 0.0f;
-                    float dx = (enemyCol.x + enemyCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
-                    float dy = (enemyCol.y + enemyCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
-                    float combinedHalfWidths = (enemyCol.w / 2.0f) + (cCol.w / 2.0f);
-                    float combinedHalfHeights = (enemyCol.h / 2.0f) + (cCol.h / 2.0f);
-                    overlapX = combinedHalfWidths - std::abs(dx);
-                    overlapY = combinedHalfHeights - std::abs(dy);
-
-                    bool collidedHorizontally = false;
-                    bool collidedVertically = false;
-
-                    // Resolve collision (Push enemy back)
-                    if (overlapX < overlapY) {
-                        collidedHorizontally = true;
-                        if (dx > 0) enemyTransform.position.x += overlapX;
-                        else enemyTransform.position.x -= overlapX;
-                        enemyTransform.velocity.x = 0; // Stop horizontal movement *for this frame* 
-                    } else {
-                        collidedVertically = true;
-                        if (dy > 0) enemyTransform.position.y += overlapY;
-                        else enemyTransform.position.y -= overlapY;
-                        enemyTransform.velocity.y = 0; // Stop vertical movement *for this frame*
-                    }
-                    
-                    // Notify AI component about the collision
-                    if (e->hasComponent<EnemyAIComponent>()) {
-                        e->getComponent<EnemyAIComponent>().notifyTerrainCollision(collidedHorizontally, collidedVertically);
-                    }
-
-                    // Update enemy's collider component immediately
-                    e->getComponent<ColliderComponent>().update();
-                }
-            }
-            // --- End Enemy Terrain Collision Check ---
-
-            // Projectile collision
-            for(auto& p : *projectiles) {
-                if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
-                                p->getComponent<ColliderComponent>().collider)) {
-                    e->getComponent<HealthComponent>().takeDamage(25);
-                    p->destroy();
-                }
-            }
-
-            // Player collision with damage cooldown
-            SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
-            if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
-                // Boss deals more damage
-                if (currentLevel == 4 && e == finalBoss) {
-                    player->getComponent<HealthComponent>().takeDamage(10); // Boss deals more damage
-                } else {
-                    player->getComponent<HealthComponent>().takeDamage(5);
-                }
-                damageTimer = damageCooldown;
-            }
-
-            // Destroy dead enemies
-            if(e->getComponent<HealthComponent>().health <= 0) {
-                // Check if the enemy is the final boss
-                if (currentLevel == 4 && e == finalBoss) {
-                    finalBossDefeated = true;
-                    // Show boss defeated message
-                    feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the SUPERUM!", "font1", {255, 215, 0, 255});
-                    
-                    // Position the feedback at the bottom of the screen
-                    int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
-                    int xPos = (1920 - feedbackWidth) / 2;
-                    feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950);
-                    
-                    // Show feedback
-                    showFeedback = true;
-                    feedbackStartTime = SDL_GetTicks();
-                    
-                    // Enable scientist rescue interaction
-                    canRescueScientist = true;
-                    
-                    // Change the map to reveal the exit
-                    level4MapChanged = true;
-                    
-                    // First, destroy all collider entities to avoid stale colliders
-                    for (auto c : *colliders) {
-                        c->destroy();
-                    }
-                    
-                    // Reload the map with the new file
-                    if (map != nullptr) {
-                        delete map;
-                        map = nullptr;
-                    }
-                    
-                    // Keep the same texture but load the "after" map
-                    std::string terrainTexture = "terrainlvl4";
-                    std::string mapPath = "./assets/lvl4/Level4MapAfter.map";
-                    
-                    // Create and load the new map
-                    map = new Map(terrainTexture, 2, 32, manager);
-                    map->LoadMap(mapPath, 60, 34);  // Call directly without condition
-                    // If you need error handling:
-                    if (!map) {
-                        throw std::runtime_error("Failed to create map");
-                    }
-                    
-                    // Allow the manager to do a refresh to properly clean up destroyed entities
-                    manager.refresh();
-                }
-                
-                e->destroy();
-            }
-        }
-
-        // Check if player is dead
-        if(player->getComponent<HealthComponent>().health <= 0) {
-            // Destroy player
-            player->destroy();
-            
-            // Reset all enemy animations to idle
             for(auto& e : *enemies) {
-                if(e->hasComponent<SpriteComponent>()) {
-                    e->getComponent<SpriteComponent>().Play("Idle");
+                // Add safety check for null or inactive enemy pointers
+                if (!e || !e->isActive()) {
+                    continue; 
                 }
-            }
-            
-            // Mark game as over
-            gameOver = true;
-            playerWon = false;
-            
-            // Show end screen with defeat
-            initEndScreen(false);
-            return;
-        }
 
-        // Center camera on player
-        camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
-        camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
-
-        // Camera bounds
-        if(camera.x < 0) camera.x = 0;
-        if(camera.y < 0) camera.y = 0;
-        if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
-        if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
-        
-        // Check win condition
-        if ((currentLevel != 4 && collectedClues >= totalClues) || 
-            (currentLevel == 4 && finalBossDefeated)) {
-            // All clues collected or boss defeated, but still require player to go north/exit
-            if (!showingExitInstructions) {
-                // Show instructions to player only once
-                if (currentLevel == 3) {
-                    feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Enter the pyramid to see what lies ahead.", "font1", {255, 215, 0, 255});
-                } else if (currentLevel == 4 && level4MapChanged) {
-                    // Boss already defeated, path revealed message shown previously
-                    // Just enable exit instructions mode
-                    showingExitInstructions = true;
+                // Check and update SpriteComponent
+                if (e->hasComponent<SpriteComponent>()) {
+                    try {
+                         e->getComponent<SpriteComponent>().update();
+                    } catch (const std::exception& ex) {
+                         // Keep try/catch? User didn't specify. Keep for now.
+                         std::cerr << "Exception during SpriteComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
+                    } catch (...) {
+                         std::cerr << "Unknown exception during SpriteComponent::update()." << std::endl; // Keep non-debug error
+                    }
                 } else {
-                    feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
                 }
-                
-                // Position the feedback at the bottom of the screen
-                int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
-                int xPos = (1920 - feedbackWidth) / 2;
-                feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
-                
-                // Show feedback
-                showFeedback = true;
-                feedbackStartTime = SDL_GetTicks();
-                showingExitInstructions = true;
+
+                // Check and update EnemyAIComponent or set Idle animation
+                if (!questionActive && !gameOver) {
+                    if (e->hasComponent<EnemyAIComponent>()) {
+                         // ---> ADD PLAYER CHECK HERE <---
+                         if (!player || !player->isActive()) {
+                         } else {
+                            try {
+                                e->getComponent<EnemyAIComponent>().update();
+                            } catch (const std::exception& ex) {
+                                std::cerr << "Exception during EnemyAIComponent::update(): " << ex.what() << std::endl; // Keep non-debug error
+                            } catch (...) {
+                                std::cerr << "Unknown exception during EnemyAIComponent::update()." << std::endl; // Keep non-debug error
+                            }
+                         }
+                    } else {
+                    }
+                } else if (e->hasComponent<SpriteComponent>()) {
+                    try {
+                        e->getComponent<SpriteComponent>().Play("Idle");
+                    } catch (const std::exception& ex) {
+                         std::cerr << "Exception during SpriteComponent::Play('Idle'): " << ex.what() << std::endl; // Keep non-debug error
+                    } catch (...) {
+                         std::cerr << "Unknown exception during SpriteComponent::Play('Idle')." << std::endl; // Keep non-debug error
+                    }
+                }
             }
             
-            // Check win condition based on level
-            if (currentLevel == 3) {
-                // For level 3, check if player has entered the pyramid at tiles 20 and 21 (x=25,y=20 and x=26,y=20)
-                float playerX = player->getComponent<TransformComponent>().position.x / 64;
-                float playerY = player->getComponent<TransformComponent>().position.y / 64;
-                
-                // Check if player is at the pyramid entrance - use a more generous collision box
-                
-                // Also check for collision between player and a broader pyramid entrance area
-                SDL_Rect playerCollider = player->getComponent<ColliderComponent>().collider;
-                SDL_Rect pyramidEntrance = {
-                    24 * 64, // x
-                    19 * 64, // y
-                    3 * 64,  // width (3 tiles wide)
-                    1 * 64   // height (1 tile tall) - shorter from the bottom
-                };
-                
-                // Adjust for camera position since player collider is in screen space
-                pyramidEntrance.x -= camera.x;
-                pyramidEntrance.y -= camera.y;
-                
-                if (Collision::AABB(playerCollider, pyramidEntrance) || 
-                    ((playerX >= 23 && playerX <= 27) && (playerY >= 18 && playerY <= 20))) {
-                    // Player has reached the pyramid, proceed to next level
-                    advanceToNextLevel();
-                }
-            } else {
-                // For other levels, check if player has gone far enough north
-                if (player->getComponent<TransformComponent>().position.y < 100) {
-                        advanceToNextLevel();
+            for(auto& p : *projectiles) {
+                if (p->hasComponent<SpriteComponent>()) {
+                    p->getComponent<SpriteComponent>().update();
                 }
             }
-        }
+            
+            for(auto& o : *objects) {
+                if(o->hasComponent<SpriteComponent>()) {
+                    o->getComponent<SpriteComponent>().update();
+                }
+            }
+            
+            // Only update player-related UI if the player exists and game is not over
+            if (player != nullptr && player->isActive() && !gameOver) {
+                // Keep game state updated for UI elements
+                int health = player->getComponent<HealthComponent>().health;
+                std::stringstream healthSS;
+                healthSS << "Health: " << health;
+                healthbar->getComponent<UILabel>().SetLabelText(healthSS.str(), "font1");
+                
+                int ammo = player->getComponent<AmmoComponent>().currentAmmo;
+                std::stringstream ammoSS;
+                ammoSS << "Ammo: " << ammo;
+                ammobar->getComponent<UILabel>().SetLabelText(ammoSS.str(), "font1");
+
+                std::stringstream clueSS;
+                clueSS << "Clues: " << collectedClues << "/" << totalClues;
+                clueCounter->getComponent<UILabel>().SetLabelText(clueSS.str(), "font1");
+            }
+
+            // Check if feedback timer has expired
+            if (showFeedback) {
+                // For regular feedback from questions
+                if (!showingExitInstructions && (currentTime - feedbackStartTime > 1500)) {
+                    closeQuestion();
+                } 
+                // For exit instructions, keep visible until player reaches exit
+                // Don't hide the "head north" message
+            }
+
+            // If game is in question mode or game over, skip gameplay logic but continue animations
+            if (questionActive || gameOver) {
+                // Ensure player doesn't move during questions if player exists
+                if (questionActive && player != nullptr && player->isActive() && 
+                    player->hasComponent<TransformComponent>()) {
+                    player->getComponent<TransformComponent>().velocity.x = 0;
+                    player->getComponent<TransformComponent>().velocity.y = 0;
+                }
+                return;
+            }
+            
+            // Run manager update ONLY for STATE_GAME when not paused/game over
+            manager.update();
+            
+            // Continue with regular game update logic - only if player exists
+            if (player != nullptr && player->isActive() && gameState == STATE_GAME) {
+                Vector2D playerPos = player->getComponent<TransformComponent>().position;
+                
+                // Get updated player position after manager.update()
+                TransformComponent& playerTransform = player->getComponent<TransformComponent>();
+                
+                // Define world boundaries
+                int worldWidth = 60 * 32 * 2;  // Assuming map size based on Map::LoadMap usage
+                int worldHeight = 34 * 32 * 2;
+                
+                // Player dimensions
+                int playerWidth = playerTransform.width * playerTransform.scale;
+                int playerHeight = playerTransform.height * playerTransform.scale;
+                
+                // Clamp player position to world boundaries
+                if (playerTransform.position.x < 0) {
+                    playerTransform.position.x = 0;
+                }
+                if (playerTransform.position.y < 0) {
+                    playerTransform.position.y = 0;
+                }
+                if (playerTransform.position.x + playerWidth > worldWidth) {
+                    playerTransform.position.x = worldWidth - playerWidth;
+                }
+                if (playerTransform.position.y + playerHeight > worldHeight) {
+                    playerTransform.position.y = worldHeight - playerHeight;
+                }
+
+                // Update player collider after potential position clamping
+                player->getComponent<ColliderComponent>().update();
+                SDL_Rect playerCol = player->getComponent<ColliderComponent>().collider;
+                
+                damageTimer -= 1.0f/60.0f;
+                
+                if (!objectCollisionsEnabled) {
+                    objectCollisionDelay -= 1.0f/60.0f;
+                    if (objectCollisionDelay <= 0.0f) {
+                        objectCollisionsEnabled = true;
+                    }
+                }
+
+                // Handle object collisions
+                if (objectCollisionsEnabled) {
+                    for (auto& o : *objects) {
+                        // if (!o || !o->isActive()) continue; // Basic safety check - Keep? Seems reasonable.
+                        if (Collision::AABB(player->getComponent<ColliderComponent>().collider,
+                                        o->getComponent<ColliderComponent>().collider)) {
+                            if (o->getComponent<ColliderComponent>().tag == "clue") {
+                                showQuestion(o);
+                            }
+                            else if (o->getComponent<ColliderComponent>().tag == "magazine") {
+                                player->getComponent<AmmoComponent>().addAmmo();
+                                o->destroy();
+                            }
+                            else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
+                                player->getComponent<HealthComponent>().heal(20);
+                                o->destroy();
+                            }
+                        }
+                    }
+                }
+
+                // Player collision with terrain
+                for(auto& c : *colliders) {
+                    SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+                    SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider; // Get player collider AFTER movement
+                    
+                    if(Collision::AABB(cCol, updatedPlayerCol)) {
+                        // Calculate overlap
+                        float overlapX = 0.0f;
+                        float overlapY = 0.0f;
+
+                        // Calculate the distance between centers
+                        float dx = (updatedPlayerCol.x + updatedPlayerCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
+                        float dy = (updatedPlayerCol.y + updatedPlayerCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
+
+                        // Calculate the minimum non-overlapping distances
+                        float combinedHalfWidths = (updatedPlayerCol.w / 2.0f) + (cCol.w / 2.0f);
+                        float combinedHalfHeights = (updatedPlayerCol.h / 2.0f) + (cCol.h / 2.0f);
+
+                        // Calculate overlap on each axis
+                        overlapX = combinedHalfWidths - std::abs(dx);
+                        overlapY = combinedHalfHeights - std::abs(dy);
+
+                        // Resolve collision based on the axis with the smallest overlap
+                        if (overlapX < overlapY) {
+                            // Push horizontally
+                            if (dx > 0) { // Player is to the right of collider
+                                playerTransform.position.x += overlapX;
+                            } else { // Player is to the left of collider
+                                playerTransform.position.x -= overlapX;
+                            }
+                            // playerTransform.velocity.x = 0; // REMOVED: Allow input to control velocity
+                        } else {
+                            // Push vertically
+                            if (dy > 0) { // Player is below collider
+                                playerTransform.position.y += overlapY;
+                            } else { // Player is above collider
+                                playerTransform.position.y -= overlapY;
+                            }
+                            // playerTransform.velocity.y = 0; // REMOVED: Allow input to control velocity
+                        }
+
+                        // Update player's collider component immediately after position change
+                        player->getComponent<ColliderComponent>().update(); 
+                    }
+                }
+
+                // Enemy collision with projectiles and player
+                for(auto& e : *enemies) {
+                    // Enemy needs access to its transform for collision response
+                    TransformComponent& enemyTransform = e->getComponent<TransformComponent>();
+
+                    // --- Enemy Terrain Collision Check ---
+                    for (auto& c : *colliders) {
+                        SDL_Rect cCol = c->getComponent<ColliderComponent>().collider;
+                        SDL_Rect enemyCol = e->getComponent<ColliderComponent>().collider; // Get enemy collider AFTER its movement
+
+                        if (Collision::AABB(cCol, enemyCol)) {
+                            // Calculate overlap (similar to player)
+                            float overlapX = 0.0f;
+                            float overlapY = 0.0f;
+                            float dx = (enemyCol.x + enemyCol.w / 2.0f) - (cCol.x + cCol.w / 2.0f);
+                            float dy = (enemyCol.y + enemyCol.h / 2.0f) - (cCol.y + cCol.h / 2.0f);
+                            float combinedHalfWidths = (enemyCol.w / 2.0f) + (cCol.w / 2.0f);
+                            float combinedHalfHeights = (enemyCol.h / 2.0f) + (cCol.h / 2.0f);
+                            overlapX = combinedHalfWidths - std::abs(dx);
+                            overlapY = combinedHalfHeights - std::abs(dy);
+
+                            bool collidedHorizontally = false;
+                            bool collidedVertically = false;
+
+                            // Resolve collision (Push enemy back)
+                            if (overlapX < overlapY) {
+                                collidedHorizontally = true;
+                                if (dx > 0) enemyTransform.position.x += overlapX;
+                                else enemyTransform.position.x -= overlapX;
+                                enemyTransform.velocity.x = 0; // Stop horizontal movement *for this frame* 
+                            } else {
+                                collidedVertically = true;
+                                if (dy > 0) enemyTransform.position.y += overlapY;
+                                else enemyTransform.position.y -= overlapY;
+                                enemyTransform.velocity.y = 0; // Stop vertical movement *for this frame*
+                            }
+                            
+                            // Notify AI component about the collision
+                            if (e->hasComponent<EnemyAIComponent>()) {
+                                e->getComponent<EnemyAIComponent>().notifyTerrainCollision(collidedHorizontally, collidedVertically);
+                            }
+
+                            // Update enemy's collider component immediately
+                            e->getComponent<ColliderComponent>().update();
+                        }
+                    }
+                    // --- End Enemy Terrain Collision Check ---
+
+                    // Projectile collision
+                    for(auto& p : *projectiles) {
+                        if(Collision::AABB(e->getComponent<ColliderComponent>().collider, 
+                                        p->getComponent<ColliderComponent>().collider)) {
+                            e->getComponent<HealthComponent>().takeDamage(25);
+                            p->destroy();
+                        }
+                    }
+
+                    // Player collision with damage cooldown
+                    SDL_Rect updatedPlayerCol = player->getComponent<ColliderComponent>().collider;
+                    if(Collision::AABB(updatedPlayerCol, e->getComponent<ColliderComponent>().collider) && damageTimer <= 0) {
+                        // Boss deals more damage
+                        if (currentLevel == 4 && e == finalBoss) {
+                            player->getComponent<HealthComponent>().takeDamage(10); // Boss deals more damage
+                        } else {
+                            player->getComponent<HealthComponent>().takeDamage(5);
+                        }
+                        damageTimer = damageCooldown;
+                    }
+                    
+                    // Destroy dead enemies
+                    if(e->getComponent<HealthComponent>().health <= 0) {
+                        // Check if the enemy is the final boss
+                        if (currentLevel == 4 && e == finalBoss) {
+                            finalBossDefeated = true;
+                            // Show boss defeated message
+                            feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the SUPERUM!", "font1", {255, 215, 0, 255});
+                            
+                            // Position the feedback at the bottom of the screen
+                            int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+                            int xPos = (1920 - feedbackWidth) / 2;
+                            feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950);
+                            
+                            // Show feedback
+                            showFeedback = true;
+                            feedbackStartTime = SDL_GetTicks();
+                            
+                            // Enable scientist rescue interaction
+                            canRescueScientist = true;
+                            
+                            // Change the map to reveal the exit
+                            level4MapChanged = true;
+                            
+                            // First, destroy all collider entities to avoid stale colliders
+                            for (auto c : *colliders) {
+                                c->destroy();
+                            }
+                            
+                            // Reload the map with the new file
+                            if (map != nullptr) {
+                                delete map;
+                                map = nullptr;
+                            }
+                            
+                            // Keep the same texture but load the "after" map
+                            std::string terrainTexture = "terrainlvl4";
+                            std::string mapPath = "./assets/lvl4/Level4MapAfter.map";
+                            
+                            // Create and load the new map
+                            map = new Map(terrainTexture, 2, 32, manager);
+                            map->LoadMap(mapPath, 60, 34);  // Call directly without condition
+                            // If you need error handling:
+                            if (!map) {
+                                throw std::runtime_error("Failed to create map");
+                            }
+                            
+                            // Allow the manager to do a refresh to properly clean up destroyed entities
+                            manager.refresh();
+                        }
+                        
+                        e->destroy();
+                    }
+                }
+
+                // Check if player is dead
+                if(player->getComponent<HealthComponent>().health <= 0) {
+                    // Destroy player
+                    player->destroy();
+                    
+                    // Reset all enemy animations to idle
+                    for(auto& e : *enemies) {
+                        if(e->hasComponent<SpriteComponent>()) {
+                            e->getComponent<SpriteComponent>().Play("Idle");
+                        }
+                    }
+                    
+                    // Mark game as over
+                    gameOver = true;
+                    playerWon = false;
+                    
+                    // Show end screen with defeat
+                    initEndScreen(false);
+                    return;
+                }
+
+                // Center camera on player
+                camera.x = player->getComponent<TransformComponent>().position.x - (camera.w / 2);
+                camera.y = player->getComponent<TransformComponent>().position.y - (camera.h / 2);
+
+                // Camera bounds
+                if(camera.x < 0) camera.x = 0;
+                if(camera.y < 0) camera.y = 0;
+                if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
+                if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
+                
+                // Check win condition
+                if ((currentLevel != 4 && collectedClues >= totalClues) || 
+                    (currentLevel == 4 && finalBossDefeated)) {
+                    // All clues collected or boss defeated, but still require player to go north/exit
+                    if (!showingExitInstructions) {
+                        // Show instructions to player only once
+                        if (currentLevel == 3) {
+                            feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Enter the pyramid to see what lies ahead.", "font1", {255, 215, 0, 255});
+                        } else if (currentLevel == 4 && level4MapChanged) {
+                            // Boss already defeated, path revealed message shown previously
+                            // Just enable exit instructions mode
+                            showingExitInstructions = true;
+                        } else {
+                            feedbackLabel->getComponent<UILabel>().SetLabelText("All clues collected! Head NORTH to exit the level.", "font1", {255, 215, 0, 255});
+                        }
+                        
+                        // Position the feedback at the bottom of the screen
+                        int feedbackWidth = feedbackLabel->getComponent<UILabel>().GetWidth();
+                        int xPos = (1920 - feedbackWidth) / 2;
+                        feedbackLabel->getComponent<UILabel>().SetPosition(xPos, 950); // Bottom of screen
+                        
+                        // Show feedback
+                        showFeedback = true;
+                        feedbackStartTime = SDL_GetTicks();
+                        showingExitInstructions = true;
+                    }
+                    
+                    // Check win condition based on level
+                    if (currentLevel == 3) {
+                        // For level 3, check if player has entered the pyramid at tiles 20 and 21 (x=25,y=20 and x=26,y=20)
+                        float playerX = player->getComponent<TransformComponent>().position.x / 64;
+                        float playerY = player->getComponent<TransformComponent>().position.y / 64;
+                        
+                        // Check if player is at the pyramid entrance - use a more generous collision box
+                        
+                        // Also check for collision between player and a broader pyramid entrance area
+                        SDL_Rect playerCollider = player->getComponent<ColliderComponent>().collider;
+                        SDL_Rect pyramidEntrance = {
+                            24 * 64, // x
+                            19 * 64, // y
+                            3 * 64,  // width (3 tiles wide)
+                            1 * 64   // height (1 tile tall) - shorter from the bottom
+                        };
+                        
+                        // Adjust for camera position since player collider is in screen space
+                        pyramidEntrance.x -= camera.x;
+                        pyramidEntrance.y -= camera.y;
+                        
+                        if (Collision::AABB(playerCollider, pyramidEntrance) || 
+                            ((playerX >= 23 && playerX <= 27) && (playerY >= 18 && playerY <= 20))) {
+                            // Player has reached the pyramid, proceed to next level
+                            advanceToNextLevel();
+                        }
+                    } else {
+                        // For other levels, check if player has gone far enough north
+                        if (player->getComponent<TransformComponent>().position.y < 100) {
+                                advanceToNextLevel();
+                        }
+                    }
+                }
             }
             break;
             
-        default:
-            break;
     }
 
     // Handle feedback message timeout (moved outside game state switch for consistency)
@@ -1806,122 +1780,138 @@ void Game::render() {
             renderReplay();
             break;
             
+        case STATE_LEADERBOARD:
+            renderLeaderboard();
+            break;
+            
         case STATE_GAME:
             SDL_RenderClear(renderer);
-    
-    // If transitioning, only render the transition screen
+
             if (transitionManager.isTransitioning()) {
                 transitionManager.renderTransition();
-        SDL_RenderPresent(renderer);
-        return;
-    }
-    
-    // Always render game elements
-    for(auto& t : *tiles) t->draw();
-    for(auto& p : *players) p->draw();
-    for(auto& e : *enemies) e->draw();
-    for(auto& o : *objects) o->draw();
-    for(auto& p : *projectiles) p->draw();
-    
-    // Ensure scientist is drawn if it exists
-    if (scientist != nullptr && scientist->isActive()) {
-        scientist->draw();
-    }
-    
-    // Always render UI elements
-    healthbar->draw();
-    ammobar->draw();
-    clueCounter->draw();
-    timerLabel->draw();
-    gameover->draw();
-    
-    // Show interaction prompt for scientist if player is close
-    if (currentLevel == 4 && canRescueScientist && !scientistRescued && 
-        player != nullptr && scientist != nullptr) {
-        Vector2D playerPos = player->getComponent<TransformComponent>().position;
-        Vector2D scientistPos = scientist->getComponent<TransformComponent>().position;
-        float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
-        
-        if (distance <= 100) { // Within interaction range
-            // Draw interaction prompt with lower opacity background
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120); // Reduced opacity (120 instead of 200)
-            
-            // Calculate prompt position (centered above scientist)
-            int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + (32 * 3) / 2; // Center on sprite (32px width * 3 scale)
-            int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 50; // Moved up a bit more
-            
-            // Create a wider background rect for prompt
-            SDL_Rect promptRect = {promptX - 75, promptY - 15, 150, 35}; // Wider by 30px (15px on each side)
-            SDL_RenderFillRect(renderer, &promptRect);
-            
-            // Add a subtle border to the prompt
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 80); // Very transparent white
-            SDL_RenderDrawRect(renderer, &promptRect); // Just the outline
-            
-            // Set up temporary label for "Press E"
-            static Entity* promptLabel = nullptr;
-            if (promptLabel == nullptr) {
-                promptLabel = &manager.addEntity();
-                SDL_Color dimWhite = {220, 220, 220, 255}; // Slightly dimmer text
-                promptLabel->addComponent<UILabel>(0, 0, "Press E", "font1", dimWhite);
+                SDL_RenderPresent(renderer);
+                return;
             }
             
-            // Position the prompt
-            int labelWidth = promptLabel->getComponent<UILabel>().GetWidth();
-            promptLabel->getComponent<UILabel>().SetPosition(promptX - labelWidth/2, promptY - 10);
-            promptLabel->draw();
+            // Draw map tiles
+            for (auto& m : manager.getGroup(groupMap)) {
+                m->draw();
+            }
             
-            // Reset draw color
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        }
-    }
-    
-    // Draw feedback if active (for both question feedback and exit instructions)
-    if (showFeedback && feedbackLabel != nullptr) {
-        // Check if it's a save game notification
-        bool isSaveNotification = 
-            feedbackLabel->hasComponent<UILabel>() && 
-            feedbackLabel->getComponent<UILabel>().GetWidth() > 0 &&
-            feedbackLabel->getComponent<UILabel>().GetPosition().y == 950 && // Position check (bottom of screen)
-            !showingExitInstructions; // Not exit instructions
+            // Draw entities categorized by group
+            for (auto& c : manager.getGroup(groupColliders)) {
+                c->draw();
+            }
+            for (auto& o : manager.getGroup(groupObjects)) {
+                o->draw();
+            }
+            for (auto& n : manager.getGroup(groupNPCs)) {
+                n->draw();
+            }
+            for (auto& p : manager.getGroup(groupPlayers)) {
+                p->draw();
+            }
+            for (auto& p : manager.getGroup(groupProjectiles)) {
+                p->draw();
+            }
+            for (auto& e : manager.getGroup(groupEnemies)) {
+                e->draw();
+            }
             
-        // Create special background for feedback only for regular feedback (questions), 
-        // not exit instructions or save notification
-        if (!showingExitInstructions && !isSaveNotification) {
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
-            SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
-            SDL_RenderFillRect(renderer, &feedbackBg);
-        }
-        
-        // Draw the feedback text
-        feedbackLabel->draw();
-        
-        // Reset draw color
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    }
-    
-    // Render question UI on top if active
-    if (questionActive) {
-        // Create a semi-transparent background for the question
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200); // Semi-transparent black
-        SDL_Rect questionBg = {1920/6, 250, 1920*2/3, 350}; // Wider and taller background
-        SDL_RenderFillRect(renderer, &questionBg);
-        
-        // Draw question elements
-        questionLabel->draw();
-        answer1Label->draw();
-        answer2Label->draw();
-        answer3Label->draw();
-        answer4Label->draw();
-        
-        // Reset draw color
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    }
-
-    SDL_RenderPresent(renderer);
+            // Draw UI items (labels, buttons, etc.)
+            for (auto& ui : manager.getGroup(groupUI)) {
+                ui->draw();
+            }
+            
+            // Render question UI on top if active
+            if (questionActive) {
+                // Create a semi-transparent background for the question
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200); // Semi-transparent black
+                SDL_Rect questionBg = {1920/6, 250, 1920*2/3, 350}; // Wider and taller background
+                SDL_RenderFillRect(renderer, &questionBg);
+                
+                // Draw question elements
+                questionLabel->draw();
+                answer1Label->draw();
+                answer2Label->draw();
+                answer3Label->draw();
+                answer4Label->draw();
+                
+                // Reset draw color and blend mode
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            }
+            
+            // Draw feedback if active (for both question feedback and exit instructions)
+            if (showFeedback && feedbackLabel != nullptr) {
+                // Check if it's a save game notification
+                bool isSaveNotification = 
+                    feedbackLabel->hasComponent<UILabel>() && 
+                    feedbackLabel->getComponent<UILabel>().GetWidth() > 0 &&
+                    feedbackLabel->getComponent<UILabel>().GetPosition().y == 950 && // Position check (bottom of screen)
+                    !showingExitInstructions; // Not exit instructions
+                    
+                // Create special background for feedback only for regular feedback (questions), 
+                // not exit instructions or save notification
+                if (!showingExitInstructions && !isSaveNotification) {
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 230); // Darker background for feedback
+                    SDL_Rect feedbackBg = {1920/4, 630, 1920/2, 100};
+                    SDL_RenderFillRect(renderer, &feedbackBg);
+                }
+                
+                // Draw the feedback text
+                feedbackLabel->draw();
+                
+                // Reset draw color and blend mode
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            }
+            
+            // Show interaction prompt for scientist if player is close
+            if (currentLevel == 4 && canRescueScientist && !scientistRescued && 
+                player != nullptr && scientist != nullptr) {
+                Vector2D playerPos = player->getComponent<TransformComponent>().position;
+                Vector2D scientistPos = scientist->getComponent<TransformComponent>().position;
+                float distance = sqrt(pow(playerPos.x - scientistPos.x, 2) + pow(playerPos.y - scientistPos.y, 2));
+                
+                if (distance <= 100) { // Within interaction range
+                    // Draw interaction prompt with lower opacity background
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 120); // Reduced opacity (120 instead of 200)
+                    
+                    // Calculate prompt position (centered above scientist)
+                    int promptX = static_cast<int>(scientistPos.x) - Game::camera.x + (32 * 3) / 2; // Center on sprite (32px width * 3 scale)
+                    int promptY = static_cast<int>(scientistPos.y) - Game::camera.y - 50; // Moved up a bit more
+                    
+                    // Create a wider background rect for prompt
+                    SDL_Rect promptRect = {promptX - 75, promptY - 15, 150, 35}; // Wider by 30px (15px on each side)
+                    SDL_RenderFillRect(renderer, &promptRect);
+                    
+                    // Add a subtle border to the prompt
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 80); // Very transparent white
+                    SDL_RenderDrawRect(renderer, &promptRect); // Just the outline
+                    
+                    // Set up temporary label for "Press E"
+                    static Entity* promptLabel = nullptr;
+                    if (promptLabel == nullptr) {
+                        promptLabel = &manager.addEntity();
+                        SDL_Color dimWhite = {220, 220, 220, 255}; // Slightly dimmer text
+                        promptLabel->addComponent<UILabel>(0, 0, "Press E", "font1", dimWhite);
+                    }
+                    
+                    // Position the prompt
+                    int labelWidth = promptLabel->getComponent<UILabel>().GetWidth();
+                    promptLabel->getComponent<UILabel>().SetPosition(promptX - labelWidth/2, promptY - 10);
+                    promptLabel->draw();
+                    
+                    // Reset draw color and blend mode
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+                }
+            }
+            SDL_RenderPresent(renderer);
             break;
             
         default:
@@ -2247,8 +2237,8 @@ void Game::initMainMenu() {
     // Add leaderboard button functionality
     menuLeaderboardButton->getComponent<UILabel>().SetClickable(true);
     menuLeaderboardButton->getComponent<UILabel>().SetOnClick([this]() { 
-        // This function currently does nothing
-        // Will be implemented later for the leaderboard
+        gameState = STATE_LEADERBOARD;
+        initLeaderboard();
     });
     menuLeaderboardButton->getComponent<UILabel>().SetHoverColor(yellow);
     menuLeaderboardButton->getComponent<UILabel>().ResetHoverState();
@@ -2333,82 +2323,8 @@ void Game::renderMainMenu() {
 }
 
 void Game::startGame() {
-    // Reset all game state variables for a fresh start
-    gameOver = false;
-    playerWon = false;
-    collectedClues = 0;
-    damageTimer = 1.0f;
-    objectCollisionDelay = 1.0f;
-    objectCollisionsEnabled = false;
-    questionActive = false;
-    pendingClueEntity = nullptr;
-    showFeedback = false;
-    showingExitInstructions = false;
-    level4MapChanged = false;
-    finalBossDefeated = false;
-    scientistRescued = false;
-    canRescueScientist = false;
-    
-    // Reset used questions when starting a new game
-    resetUsedQuestions();
-    
-    // Clear previous recorded positions and enable recording
-    std::ofstream positionFile("assets/position.txt", std::ios::trunc);
-    positionFile.close();
-    isRecordingPositions = true;
-    lastRecordedPosition = Vector2D(0, 0);
-    
-    // Change game state
-    gameState = STATE_GAME;
-    
-    // Start gameplay timer
-    gameStartTime = SDL_GetTicks();
-    gameplayTime = 0;
-    
-    // Clear menu entities
-    menuTitle = nullptr;
-    menuNewGameButton = nullptr;
-    menuLoadGameButton = nullptr;
-    menuSettingsButton = nullptr;
-    menuLeaderboardButton = nullptr;
-    menuExitButton = nullptr;
-    
-    // Reset all entity pointers
-    player = nullptr;
-    finalBoss = nullptr;
-    healthbar = nullptr;
-    ammobar = nullptr;
-    gameover = nullptr;
-    clueCounter = nullptr;
-    feedbackLabel = nullptr;
-    scientist = nullptr;
-    questionLabel = nullptr;
-    answer1Label = nullptr;
-    answer2Label = nullptr;
-    answer3Label = nullptr;
-    answer4Label = nullptr;
-    questionBackground = nullptr;
-    
-    // Clear all existing entities
-    manager.clear();
-    
-    // Ensure transition label is recreated
-    transitionLabel = &manager.addEntity();
-    transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
-    transitionManager.mTransitionLabel = transitionLabel;
-    
-    // Re-initialize transition manager with new entity manager state
-    transitionManager.init(this, &manager);
-    
-    // Start with level 1
-    currentLevel = 1;
-    
-    // Reset position tracking
-    positionManager.resetPositions();
-    
-    // Load the level and initialize game entities
-    loadLevel(currentLevel);
-    initEntities();
+    // Ask for player name before starting the game
+    promptPlayerName();
 }
 
 void Game::loadGame() {
@@ -2446,6 +2362,14 @@ void Game::loadGame() {
         saveFile.read(reinterpret_cast<char*>(&playerCurrentAmmo), sizeof(playerCurrentAmmo));
         saveFile.read(reinterpret_cast<char*>(&playerMaxAmmo), sizeof(playerMaxAmmo));
         loadSuccess &= saveFile.good();
+
+        // Load player name
+        std::string loadedPlayerName;
+        if (readString(saveFile, loadedPlayerName)) {
+            playerName = loadedPlayerName;
+        } else {
+            loadSuccess = false;
+        }
 
         // Game State
         saveFile.read(reinterpret_cast<char*>(&loadedClues), sizeof(loadedClues));
@@ -2800,6 +2724,11 @@ void Game::initEndScreen(bool victory) {
         "You failed to complete your mission. Better luck next time!";
     endMessage->addComponent<UILabel>(0, 300, message, "font1", white);
     
+    // If player won, save to leaderboard
+    if (victory && !playerName.empty()) {
+        saveToLeaderboard(playerName, gameplayTime);
+    }
+    
     endRestartButton->addComponent<UILabel>(0, 450, "RESTART GAME", "font1", white);
     endReplayButton->addComponent<UILabel>(0, 500, "REPLAY (NAJBOLJ NEPOTREBNA FUNKCIJA, KI NE DELA)", "font1", white);  // Add replay button label
     endMenuButton->addComponent<UILabel>(0, 550, "MAIN MENU", "font1", white);  // Adjust position
@@ -2826,41 +2755,7 @@ void Game::initEndScreen(bool victory) {
     // Make buttons clickable
     endRestartButton->getComponent<UILabel>().SetClickable(true);
     endRestartButton->getComponent<UILabel>().SetOnClick([this]() { 
-        // Store gameState before clearing entities
-        GameState nextState = STATE_GAME;
-        
-        // First change all needed variables before destroying entities
-        gameOver = false;
-        playerWon = false;
-        collectedClues = 0;
-        damageTimer = 1.0f;
-        objectCollisionDelay = 1.0f;
-        objectCollisionsEnabled = false;
-        questionActive = false;
-        pendingClueEntity = nullptr;
-        showFeedback = false;
-        showingExitInstructions = false; // Reset exit instructions flag
-        level4MapChanged = false; // Reset level 4 map state
-        finalBossDefeated = false; // Reset final boss state
-        scientistRescued = false; // Reset scientist state
-        canRescueScientist = false; // Reset scientist interaction flag
-        currentLevel = 1;
-        
-        // Reset used questions when restarting the game
-        resetUsedQuestions();
-        
-        // Set clue count correctly for level 1
-        totalClues = 3; // Reset to default value, loadLevel will adjust if needed
-        
-        // Reset position tracking
-        positionManager.resetPositions();
-        
-        // Reset gameplay timer
-        gameStartTime = SDL_GetTicks();
-        gameplayTime = 0;
-        
-        // Use a simple flag to defer cleanup and state change
-        needsRestart = true;
+        restart(); // Call restart function directly
     });
     endRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
     endRestartButton->getComponent<UILabel>().ResetHoverState();
@@ -2954,7 +2849,19 @@ void Game::togglePause() {
         // Return to game state
         gameState = STATE_GAME;
         
-        // Clean up pause menu entities
+        // Clean up pause menu entities by actually destroying them
+        if (pauseTitle) pauseTitle->destroy();
+        if (pauseResumeButton) pauseResumeButton->destroy();
+        if (pauseSaveButton) pauseSaveButton->destroy();
+        if (pauseRestartButton) pauseRestartButton->destroy();
+        if (pauseSettingsButton) pauseSettingsButton->destroy();
+        if (pauseMainMenuButton) pauseMainMenuButton->destroy();
+        if (pauseBackground) pauseBackground->destroy();
+        
+        // Refresh entity manager to remove destroyed entities
+        manager.refresh();
+        
+        // Reset pointers
         pauseTitle = nullptr;
         pauseResumeButton = nullptr;
         pauseSaveButton = nullptr;
@@ -3020,8 +2927,7 @@ void Game::initPauseMenu() {
     
     pauseRestartButton->getComponent<UILabel>().SetClickable(true);
     pauseRestartButton->getComponent<UILabel>().SetOnClick([this]() { 
-        needsRestart = true;
-        gameState = STATE_GAME;
+        restart(); // Call the actual restart function directly
     });
     pauseRestartButton->getComponent<UILabel>().SetHoverColor(yellow);
     
@@ -3208,6 +3114,9 @@ void Game::saveGame() {
     saveFile.write(reinterpret_cast<const char*>(&pHealth), sizeof(pHealth));
     saveFile.write(reinterpret_cast<const char*>(&pCurrentAmmo), sizeof(pCurrentAmmo));
     saveFile.write(reinterpret_cast<const char*>(&pMaxAmmo), sizeof(pMaxAmmo));
+    
+    // Save player name
+    writeString(saveFile, playerName);
 
     // Game State
     saveFile.write(reinterpret_cast<const char*>(&collectedClues), sizeof(collectedClues));
@@ -3566,8 +3475,6 @@ void Game::applySettings() {
     draggingVolumeSlider = false;
 }
 
-// Add this at the end of the file
-
 void Game::replay() {
     // Reset game state for replay
     gameState = STATE_REPLAY;
@@ -3721,5 +3628,352 @@ void Game::recordPlayerPosition() {
             }
             positionFile.close();
         }
+    }
+}
+
+void Game::promptPlayerName() {
+    // Clear previous input buffer
+    SDL_StopTextInput();
+    SDL_StartTextInput();
+    
+    // Set flag to indicate we're waiting for player name input
+    waitingForPlayerName = true;
+    playerName = "";
+    
+    // Create UI label for name prompt
+    Entity* namePrompt = &manager.addEntity();
+    namePrompt->addComponent<UILabel>(0, 400, "Enter your name:", "font1", white);
+    
+    // Center the prompt
+    int promptWidth = namePrompt->getComponent<UILabel>().GetWidth();
+    int promptX = (1920 - promptWidth) / 2;
+    namePrompt->getComponent<UILabel>().SetPosition(promptX, 400);
+    
+    // Create UI label for the input box
+    Entity* inputBox = &manager.addEntity();
+    inputBox->addComponent<UILabel>(0, 450, "_", "font1", white);
+    
+    // Center the input box
+    int inputWidth = inputBox->getComponent<UILabel>().GetWidth();
+    int inputX = (1920 - inputWidth) / 2;
+    inputBox->getComponent<UILabel>().SetPosition(inputX, 450);
+    
+    // Show the UI
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    namePrompt->draw();
+    inputBox->draw();
+    SDL_RenderPresent(renderer);
+    
+    // Main input loop
+    bool enteringName = true;
+    while (enteringName && isRunning) {
+        // Handle events for text input
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_QUIT) {
+                isRunning = false;
+                enteringName = false;
+            }
+            else if (event.type == SDL_KEYDOWN) {
+                if (event.key.keysym.sym == SDLK_RETURN) {
+                    // Name is complete when Enter is pressed
+                    enteringName = false;
+                    if (playerName.empty()) {
+                        playerName = "Player"; // Default name
+                    }
+                }
+                else if (event.key.keysym.sym == SDLK_BACKSPACE && !playerName.empty()) {
+                    // Remove last character on backspace
+                    playerName.pop_back();
+                }
+                else if (event.key.keysym.sym == SDLK_ESCAPE) {
+                    // Cancel name entry
+                    enteringName = false;
+                    playerName = "Player"; // Default name
+                }
+            }
+            else if (event.type == SDL_TEXTINPUT) {
+                // Append text input to player name (limit to 15 characters)
+                if (playerName.length() < 15) {
+                    playerName += event.text.text;
+                }
+            }
+            
+            // Update input box text
+            std::string displayText = playerName + "_";
+            inputBox->getComponent<UILabel>().SetLabelText(displayText, "font1");
+            
+            // Re-center the input box
+            inputWidth = inputBox->getComponent<UILabel>().GetWidth();
+            inputX = (1920 - inputWidth) / 2;
+            inputBox->getComponent<UILabel>().SetPosition(inputX, 450);
+            
+            // Redraw the UI
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderClear(renderer);
+            namePrompt->draw();
+            inputBox->draw();
+            SDL_RenderPresent(renderer);
+        }
+        
+        // Small delay to prevent hogging CPU
+        SDL_Delay(16);
+    }
+    
+    // Clean up text input
+    SDL_StopTextInput();
+    waitingForPlayerName = false;
+    
+    // Remove the UI elements
+    namePrompt->destroy();
+    inputBox->destroy();
+    manager.refresh();
+    
+    // Now actually start the game with the collected player name
+    // Reset all game state variables for a fresh start
+    gameOver = false;
+    playerWon = false;
+    collectedClues = 0;
+    damageTimer = 1.0f;
+    objectCollisionDelay = 1.0f;
+    objectCollisionsEnabled = false;
+    questionActive = false;
+    pendingClueEntity = nullptr;
+    showFeedback = false;
+    showingExitInstructions = false;
+    level4MapChanged = false;
+    finalBossDefeated = false;
+    scientistRescued = false;
+    canRescueScientist = false;
+    
+    // Reset used questions when starting a new game
+    resetUsedQuestions();
+    
+    // Clear previous recorded positions and enable recording
+    std::ofstream positionFile("assets/position.txt", std::ios::trunc);
+    positionFile.close();
+    isRecordingPositions = true;
+    lastRecordedPosition = Vector2D(0, 0);
+    
+    // Change game state
+    gameState = STATE_GAME;
+    
+    // Start gameplay timer
+    gameStartTime = SDL_GetTicks();
+    gameplayTime = 0;
+    
+    // Clear menu entities
+    menuTitle = nullptr;
+    menuNewGameButton = nullptr;
+    menuLoadGameButton = nullptr;
+    menuSettingsButton = nullptr;
+    menuLeaderboardButton = nullptr;
+    menuExitButton = nullptr;
+    
+    // Reset all entity pointers
+    player = nullptr;
+    finalBoss = nullptr;
+    healthbar = nullptr;
+    ammobar = nullptr;
+    gameover = nullptr;
+    clueCounter = nullptr;
+    feedbackLabel = nullptr;
+    scientist = nullptr;
+    questionLabel = nullptr;
+    answer1Label = nullptr;
+    answer2Label = nullptr;
+    answer3Label = nullptr;
+    answer4Label = nullptr;
+    questionBackground = nullptr;
+    
+    // Clear all existing entities
+    manager.clear();
+    
+    // Ensure transition label is recreated
+    transitionLabel = &manager.addEntity();
+    transitionLabel->addComponent<UILabel>(0, 0, "", "font2", white);
+    transitionManager.mTransitionLabel = transitionLabel;
+    
+    // Re-initialize transition manager with new entity manager state
+    transitionManager.init(this, &manager);
+    
+    // Start with level 1
+    currentLevel = 1;
+    
+    // Reset position tracking
+    positionManager.resetPositions();
+    
+    // Load the level and initialize game entities
+    loadLevel(currentLevel);
+    initEntities();
+}
+
+void Game::initLeaderboard() {
+    // Load leaderboard entries from file
+    leaderboardEntries.clear();
+    
+    std::ifstream file("assets/leaderboard.txt");
+    if (file.is_open()) {
+        std::string line;
+        while (std::getline(file, line) && leaderboardEntries.size() < 5) {
+            // Parse line format: "PlayerName,Time"
+            size_t commaPos = line.find(',');
+            if (commaPos != std::string::npos) {
+                std::string name = line.substr(0, commaPos);
+                std::string time = line.substr(commaPos + 1);
+                leaderboardEntries.push_back(std::make_pair(name, time));
+            }
+        }
+        file.close();
+    }
+    
+    // Create leaderboard UI elements
+    leaderboardTitle = &manager.addEntity();
+    leaderboardTitle->addComponent<UILabel>(0, 150, "LEADERBOARD", "font2", white);
+    
+    // Center the title
+    int titleWidth = leaderboardTitle->getComponent<UILabel>().GetWidth();
+    int titleX = (1920 - titleWidth) / 2;
+    leaderboardTitle->getComponent<UILabel>().SetPosition(titleX, 150);
+    
+    // Create labels for each entry (or "No entries" if empty)
+    if (leaderboardEntries.empty()) {
+        leaderboardEntryLabels[0] = &manager.addEntity();
+        leaderboardEntryLabels[0]->addComponent<UILabel>(0, 300, "No entries yet", "font1", white);
+        
+        // Center the message
+        int msgWidth = leaderboardEntryLabels[0]->getComponent<UILabel>().GetWidth();
+        int msgX = (1920 - msgWidth) / 2;
+        leaderboardEntryLabels[0]->getComponent<UILabel>().SetPosition(msgX, 300);
+    } else {
+        for (int i = 0; i < leaderboardEntries.size(); i++) {
+            // Format like: "RAN #: PLAYER_NAME TIME"
+            std::string entryText = "RUN " + std::to_string(i + 1) + ": " + leaderboardEntries[i].first + " " + leaderboardEntries[i].second;
+            leaderboardEntryLabels[i] = &manager.addEntity();
+            leaderboardEntryLabels[i]->addComponent<UILabel>(0, 250 + i * 80, entryText, "font1", white);
+            
+            // Center each entry
+            int entryWidth = leaderboardEntryLabels[i]->getComponent<UILabel>().GetWidth();
+            int entryX = (1920 - entryWidth) / 2;
+            leaderboardEntryLabels[i]->getComponent<UILabel>().SetPosition(entryX, 250 + i * 80);
+        }
+    }
+    
+    // Create ESC to return message instead of a button
+    leaderboardBackButton = &manager.addEntity();
+    leaderboardBackButton->addComponent<UILabel>(0, 700, "PRESS ESC TO RETURN", "font1", white);
+    
+    // Center the message
+    int backWidth = leaderboardBackButton->getComponent<UILabel>().GetWidth();
+    int backX = (1920 - backWidth) / 2;
+    leaderboardBackButton->getComponent<UILabel>().SetPosition(backX, 700);
+    
+    // Make the button clickable to return to main menu
+    leaderboardBackButton->getComponent<UILabel>().SetClickable(true);
+    leaderboardBackButton->getComponent<UILabel>().SetOnClick([this]() {
+        // Return to main menu
+        gameState = STATE_MAIN_MENU;
+        
+        // Clean up leaderboard UI
+        if (leaderboardTitle) leaderboardTitle->destroy();
+        for (auto& label : leaderboardEntryLabels) {
+            if (label) label->destroy();
+            label = nullptr;
+        }
+        leaderboardBackButton->destroy();
+        
+        // Re-init main menu
+        initMainMenu();
+    });
+    leaderboardBackButton->getComponent<UILabel>().SetHoverColor(yellow);
+}
+
+void Game::renderLeaderboard() {
+    // Use a solid black background
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    
+    // Draw leaderboard elements
+    leaderboardTitle->draw();
+    for (auto& label : leaderboardEntryLabels) {
+        if (label) label->draw();
+    }
+    leaderboardBackButton->draw();
+    
+    SDL_RenderPresent(renderer);
+}
+
+void Game::updateLeaderboard() {
+    // Handle hover state for back button
+    if (leaderboardBackButton && leaderboardBackButton->hasComponent<UILabel>()) {
+        int mouseX, mouseY;
+        SDL_GetMouseState(&mouseX, &mouseY);
+        bool isOver = leaderboardBackButton->getComponent<UILabel>().IsMouseOver(mouseX, mouseY);
+        
+        if (isOver) {
+            leaderboardBackButton->getComponent<UILabel>().SetTextColor(yellow);
+        } else {
+            leaderboardBackButton->getComponent<UILabel>().SetTextColor(white);
+        }
+    }
+}
+
+void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
+    // Format time as MM:SS
+    Uint32 totalSeconds = gameTime / 1000;
+    Uint32 minutes = totalSeconds / 60;
+    Uint32 seconds = totalSeconds % 60;
+    
+    std::string formattedTime = 
+        (minutes < 10 ? "0" : "") + std::to_string(minutes) + ":" + 
+        (seconds < 10 ? "0" : "") + std::to_string(seconds);
+    
+    // Read existing entries
+    std::vector<std::pair<std::string, std::string>> entries;
+    
+    std::ifstream inFile("assets/leaderboard.txt");
+    if (inFile.is_open()) {
+        std::string line;
+        while (std::getline(inFile, line) && entries.size() < 5) {
+            // Parse line format: "PlayerName,Time"
+            size_t commaPos = line.find(',');
+            if (commaPos != std::string::npos) {
+                std::string name = line.substr(0, commaPos);
+                std::string time = line.substr(commaPos + 1);
+                entries.push_back(std::make_pair(name, time));
+            }
+        }
+        inFile.close();
+    }
+    
+    // Add new entry at the beginning (most recent)
+    entries.insert(entries.begin(), std::make_pair(playerName, formattedTime));
+    
+    // Keep only the 5 most recent entries
+    if (entries.size() > 5) {
+        entries.resize(5);
+    }
+    
+    // Save back to file
+    std::ofstream outFile("assets/leaderboard.txt");
+    if (outFile.is_open()) {
+        for (const auto& entry : entries) {
+            outFile << entry.first << "," << entry.second << std::endl;
+        }
+        outFile.close();
+    }
+    
+    // Update leaderboard display if we're in that state
+    if (gameState == STATE_LEADERBOARD) {
+        // Clean up old UI
+        if (leaderboardTitle) leaderboardTitle->destroy();
+        for (auto& label : leaderboardEntryLabels) {
+            if (label) label->destroy();
+            label = nullptr;
+        }
+        if (leaderboardBackButton) leaderboardBackButton->destroy();
+        
+        // Re-initialize with updated data
+        initLeaderboard();
     }
 }
