@@ -78,6 +78,9 @@ Uint32 Game::gameplayTime = 0;
 Entity* Game::timerLabel = nullptr;
 int Game::volumeLevel = 75; // Default volume level to 75%
 
+// Initialize music tracking
+std::string Game::currentMusic = "";
+
 // Replay related static variables
 bool Game::isRecordingPositions = false;
 bool Game::isReplaying = false;
@@ -1725,6 +1728,7 @@ void Game::update()
                     if (distance <= 300 && assets && !bossMusicPlaying) {
                         assets->StopMusic();
                         assets->PlayMusic("boss", volumeLevel);
+                        currentMusic = "boss";
                         bossMusicPlaying = true;
                     }
                 }
@@ -2194,9 +2198,11 @@ void Game::loadLevel(int levelNum) {
         switch (currentLevel) {
             case 1:
                 assets->PlayMusic("level1", volumeLevel);
+                currentMusic = "level1";
                 break;
             case 2:
                 assets->PlayMusic("level2", volumeLevel);
+                currentMusic = "level2";
                 break;
             case 3:
             case 4:
@@ -2204,13 +2210,16 @@ void Game::loadLevel(int levelNum) {
                 if (currentLevel == 4 && finalBossDefeated) {
                     // If the boss was already defeated, no specific music needed
                     assets->PlayMusic("level3-4", volumeLevel);
+                    currentMusic = "level3-4";
                 } else {
                     assets->PlayMusic("level3-4", volumeLevel);
+                    currentMusic = "level3-4";
                 }
                 break;
             default:
                 // Default music
                 assets->PlayMusic("level1", volumeLevel);
+                currentMusic = "level1";
                 break;
         }
     }
@@ -2288,8 +2297,12 @@ void Game::initMainMenu() {
     
     // Play main menu music
     if (assets) {
-        assets->StopMusic();
-        assets->PlayMusic("mainmenu", volumeLevel);
+        // Only change music if we're not already playing the main menu music
+        if (currentMusic != "mainmenu") {
+            assets->StopMusic();
+            assets->PlayMusic("mainmenu", volumeLevel);
+            currentMusic = "mainmenu";
+        }
     }
     
     // Create menu entity objects
@@ -2474,6 +2487,14 @@ void Game::loadGame() {
         loadLevel(currentLevel);
         initEntities();
         gameStartTime = SDL_GetTicks();
+        
+        // Play level 1 music
+        if (assets) {
+            assets->StopMusic();
+            assets->PlayMusic("level1", volumeLevel);
+            currentMusic = "level1";
+        }
+        
         return;
     }
     
@@ -2839,6 +2860,40 @@ void Game::loadGame() {
         // Set Game State
         gameState = STATE_GAME;
 
+        // Play the appropriate level music based on the loaded level
+        if (assets) {
+            assets->StopMusic();
+            
+            // Play music based on current level
+            switch (currentLevel) {
+                case 1:
+                    assets->PlayMusic("level1", volumeLevel);
+                    currentMusic = "level1";
+                    break;
+                case 2:
+                    assets->PlayMusic("level2", volumeLevel);
+                    currentMusic = "level2";
+                    break;
+                case 3:
+                case 4:
+                    // Level 3 and 4 share the same music until the boss is encountered
+                    if (currentLevel == 4 && finalBossDefeated) {
+                        // If the boss was already defeated, no specific music needed
+                        assets->PlayMusic("level3-4", volumeLevel);
+                        currentMusic = "level3-4";
+                    } else {
+                        assets->PlayMusic("level3-4", volumeLevel);
+                        currentMusic = "level3-4";
+                    }
+                    break;
+                default:
+                    // Default music
+                    assets->PlayMusic("level1", volumeLevel);
+                    currentMusic = "level1";
+                    break;
+            }
+        }
+
         std::cout << "Game loaded successfully!" << std::endl;
     } 
     catch (const std::exception& e) {
@@ -3004,6 +3059,7 @@ void Game::togglePause() {
         if (assets) {
             assets->StopMusic();
             assets->PlayMusic("mainmenu", volumeLevel);
+            currentMusic = "mainmenu";
         }
         
         // Change to pause state
@@ -3022,9 +3078,11 @@ void Game::togglePause() {
             switch (currentLevel) {
                 case 1:
                     assets->PlayMusic("level1", volumeLevel);
+                    currentMusic = "level1";
                     break;
                 case 2:
                     assets->PlayMusic("level2", volumeLevel);
+                    currentMusic = "level2";
                     break;
                 case 3:
                 case 4:
@@ -3032,6 +3090,7 @@ void Game::togglePause() {
                     if (currentLevel == 4 && finalBossDefeated) {
                         // If the boss was already defeated, no specific music needed
                         assets->PlayMusic("level3-4", volumeLevel);
+                        currentMusic = "level3-4";
                     } else {
                         assets->PlayMusic("level3-4", volumeLevel);
                         // Reset boss music flag when returning to level 4 to allow it to trigger again
@@ -3043,6 +3102,7 @@ void Game::togglePause() {
                 default:
                     // Default music
                     assets->PlayMusic("level1", volumeLevel);
+                    currentMusic = "level1";
                     break;
             }
         }

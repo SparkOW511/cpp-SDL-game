@@ -184,6 +184,9 @@ class Game {
 
         // Volume settings (0-100)
         static int volumeLevel;
+        
+        // Current music track
+        static std::string currentMusic;
 
         // Replay related entities
         Entity* replayEntity = nullptr;       // Entity used for replay visualization
