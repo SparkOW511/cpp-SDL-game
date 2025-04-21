@@ -69,13 +69,14 @@ bool Game::showingExitInstructions = false; // Initialize to false
 GameState Game::gameState = STATE_MAIN_MENU; // Initialize to main menu
 bool Game::level4MapChanged = false;
 bool Game::finalBossDefeated = false;
+bool Game::bossMusicPlaying = false;
 bool Game::scientistRescued = false;
 bool Game::canRescueScientist = false;
 bool Game::returnToMainMenu = false;
 Uint32 Game::gameStartTime = 0;
 Uint32 Game::gameplayTime = 0;
 Entity* Game::timerLabel = nullptr;
-int Game::volumeLevel = 90; // Default volume level to 90%
+int Game::volumeLevel = 75; // Default volume level to 75%
 
 // Replay related static variables
 bool Game::isRecordingPositions = false;
@@ -408,6 +409,20 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
         std::cout << "Error initializing SDL_ttf" << std::endl;
     }
 
+    // Initialize SDL_mixer with simpler configuration
+    int initResult = Mix_Init(0); // Initialize without any specific format flags
+    printf("SDL_mixer initialization result: %d\n", initResult);
+    
+    if(Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024) < 0) {
+        std::cout << "Error initializing SDL_mixer: " << Mix_GetError() << std::endl;
+        std::cout << "Continuing without music support" << std::endl;
+    } else {
+        std::cout << "SDL_mixer initialized successfully" << std::endl;
+    }
+    
+    // Allocate fewer mixing channels to save memory
+    Mix_AllocateChannels(8);
+
     // Clean up previous asset manager if it exists
     if(assets != nullptr) {
         delete assets;
@@ -436,6 +451,32 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     // Load fonts
     assets->AddFont("font1", "./assets/MINECRAFT.TTF", 32);
     assets->AddFont("font2", "./assets/MINECRAFT.TTF", 72);
+
+    // Load sounds
+    assets->AddSound("click", "./assets/sounds/click.mp3");
+    assets->AddSound("shoot", "./assets/sounds/shoot.wav");
+    assets->AddSound("hurt", "./assets/sounds/hurt.wav");
+    assets->AddSound("levelTransition", "./assets/sounds/leveltransition.wav");
+    assets->AddSound("gameOver", "./assets/sounds/gameover.mp3");
+    assets->AddSound("victory", "./assets/sounds/victory.mp3");
+
+    // Just removed the clue sound, keeping others
+    assets->AddSound("magazine", "./assets/sounds/objects/magazine.wav");
+    assets->AddSound("healthpotion", "./assets/sounds/objects/healthpotion.wav");
+
+    assets->AddSound("correctanswer", "./assets/sounds/question/correctanswer.mp3");
+    assets->AddSound("wronganswer", "./assets/sounds/question/wronganswer.mp3");
+    
+    // Simplify music loading to avoid issues
+    printf("Loading music files in OGG format for SDL_mixer compatibility\n");
+    assets->AddMusic("mainmenu", "./assets/sounds/levels/mainmenu.ogg");
+    assets->AddMusic("level1", "./assets/sounds/levels/level1.ogg");
+    assets->AddMusic("level2", "./assets/sounds/levels/level2.ogg");
+    assets->AddMusic("level3-4", "./assets/sounds/levels/level3-4.ogg");
+    assets->AddMusic("boss", "./assets/sounds/levels/bossmusic.ogg");
+    
+    // Set initial volume
+    assets->SetMasterVolume(volumeLevel);
 
     // Initialize random number generator
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
@@ -1119,6 +1160,7 @@ void Game::update()
         playerWon = false;
         collectedClues = 0;
         damageTimer = 1.0f;
+        hurtSoundTimer = 0.0f; // Reset hurt sound timer
         objectCollisionDelay = 1.0f;
         objectCollisionsEnabled = false;
         questionActive = false;
@@ -1127,8 +1169,9 @@ void Game::update()
         showingExitInstructions = false;
         level4MapChanged = false;
         finalBossDefeated = false;
-        scientistRescued = false;
-        canRescueScientist = false;
+        bossMusicPlaying = false; // Reset boss music state
+        scientistRescued = false; // Reset scientist state
+        canRescueScientist = false; // Reset scientist interaction flag
         currentLevel = 1;
         
         // Reset used questions
@@ -1249,6 +1292,7 @@ void Game::update()
                     // Reset game state variables for next level
                     collectedClues = 0;
                     damageTimer = 1.0f;
+                    hurtSoundTimer = 0.0f; // Reset hurt sound timer
                     objectCollisionDelay = 1.0f;
                     objectCollisionsEnabled = false;
                     questionActive = false;
@@ -1375,7 +1419,7 @@ void Game::update()
             // Check if feedback timer has expired
             if (showFeedback) {
                 // For regular feedback from questions
-                if (!showingExitInstructions && (currentTime - feedbackStartTime > 1500)) {
+                if (!showingExitInstructions && (currentTime - feedbackStartTime > 1200)) {
                     closeQuestion();
                 } 
                 // For exit instructions, keep visible until player reaches exit
@@ -1431,6 +1475,11 @@ void Game::update()
                 
                 damageTimer -= 1.0f/60.0f;
                 
+                // Update hurt sound timer
+                if (hurtSoundTimer > 0.0f) {
+                    hurtSoundTimer -= 1.0f/60.0f;
+                }
+                
                 if (!objectCollisionsEnabled) {
                     objectCollisionDelay -= 1.0f/60.0f;
                     if (objectCollisionDelay <= 0.0f) {
@@ -1450,10 +1499,12 @@ void Game::update()
                             else if (o->getComponent<ColliderComponent>().tag == "magazine") {
                                 player->getComponent<AmmoComponent>().addAmmo();
                                 o->destroy();
+                                assets->PlaySound("magazine", volumeLevel);
                             }
                             else if (o->getComponent<ColliderComponent>().tag == "healthpotion") {
                                 player->getComponent<HealthComponent>().heal(20);
                                 o->destroy();
+                                assets->PlaySound("healthpotion", volumeLevel);
                             }
                         }
                     }
@@ -1571,6 +1622,11 @@ void Game::update()
                         } else {
                             player->getComponent<HealthComponent>().takeDamage(5);
                         }
+                        // Play hurt sound when player takes damage (with cooldown check)
+                        if (hurtSoundTimer <= 0.0f) {
+                            assets->PlaySound("hurt", volumeLevel);
+                            hurtSoundTimer = hurtSoundCooldown;
+                        }
                         damageTimer = damageCooldown;
                     }
                     
@@ -1658,6 +1714,20 @@ void Game::update()
                 if(camera.y < 0) camera.y = 0;
                 if(camera.x > worldWidth - camera.w) camera.x = worldWidth - camera.w;
                 if(camera.y > worldHeight - camera.h) camera.y = worldHeight - camera.h;
+                
+                // Check for boss encounter in level 4
+                if (currentLevel == 4 && !finalBossDefeated && finalBoss != nullptr && player != nullptr) {
+                    Vector2D playerPos = player->getComponent<TransformComponent>().position;
+                    Vector2D bossPos = finalBoss->getComponent<TransformComponent>().position;
+                    float distance = sqrt(pow(playerPos.x - bossPos.x, 2) + pow(playerPos.y - bossPos.y, 2));
+                    
+                    // If close enough to the boss, play boss music
+                    if (distance <= 300 && assets && !bossMusicPlaying) {
+                        assets->StopMusic();
+                        assets->PlayMusic("boss", volumeLevel);
+                        bossMusicPlaying = true;
+                    }
+                }
                 
                 // Check win condition
                 if ((currentLevel != 4 && collectedClues >= totalClues) || 
@@ -1923,6 +1993,9 @@ void Game::clean()
 {
     SDL_DestroyWindow(window);
     SDL_DestroyRenderer(renderer);
+    Mix_CloseAudio();
+    Mix_Quit();
+    TTF_Quit();
     SDL_Quit();
     std::cout << "Game cleaned" << std::endl;
 }
@@ -1933,6 +2006,7 @@ void Game::restart() {
     playerWon = false;
     collectedClues = 0;
     damageTimer = 1.0f;
+    hurtSoundTimer = 0.0f; // Reset hurt sound timer
     objectCollisionDelay = 1.0f;
     objectCollisionsEnabled = false;
     questionActive = false;
@@ -1941,6 +2015,7 @@ void Game::restart() {
     showingExitInstructions = false; // Reset exit instructions flag
     level4MapChanged = false; // Reset level 4 map state
     finalBossDefeated = false; // Reset final boss state
+    bossMusicPlaying = false; // Reset boss music state
     scientistRescued = false; // Reset scientist state
     canRescueScientist = false; // Reset scientist interaction flag
     currentLevel = 1;
@@ -2061,8 +2136,12 @@ void Game::checkAnswer(int selectedAnswer) {
         collectedClues++;
         pendingClueEntity->destroy();
         feedbackLabel->getComponent<UILabel>().SetLabelText("CORRECT!", "font2", green);
+        // Play correct answer sound
+        assets->PlaySound("correctanswer", volumeLevel);
     } else {
         feedbackLabel->getComponent<UILabel>().SetLabelText("INCORRECT!", "font2", red);
+        // Play wrong answer sound
+        assets->PlaySound("wronganswer", volumeLevel);
     }
     
     // Position the feedback centered horizontally and lower on the screen
@@ -2106,6 +2185,36 @@ void Game::loadLevel(int levelNum) {
     collectedClues = 0;
     showingExitInstructions = false; // Reset exit instructions flag for new level
     
+    // Play appropriate level music
+    if (assets) {
+        // First stop any current music
+        assets->StopMusic();
+        
+        // Play music based on current level
+        switch (currentLevel) {
+            case 1:
+                assets->PlayMusic("level1", volumeLevel);
+                break;
+            case 2:
+                assets->PlayMusic("level2", volumeLevel);
+                break;
+            case 3:
+            case 4:
+                // Level 3 and 4 share the same music until the boss is encountered
+                if (currentLevel == 4 && finalBossDefeated) {
+                    // If the boss was already defeated, no specific music needed
+                    assets->PlayMusic("level3-4", volumeLevel);
+                } else {
+                    assets->PlayMusic("level3-4", volumeLevel);
+                }
+                break;
+            default:
+                // Default music
+                assets->PlayMusic("level1", volumeLevel);
+                break;
+        }
+    }
+    
     // Set level-specific quantities
     if (currentLevel == 1) {
         totalClues = 3;
@@ -2125,6 +2234,7 @@ void Game::loadLevel(int levelNum) {
         totalHealthPotions = 9;
         level4MapChanged = false; // Reset the map change flag for level 4
         finalBossDefeated = false; // Reset the boss defeated flag
+        bossMusicPlaying = false; // Reset the boss music flag
     }
     
     // Create appropriate map based on level number
@@ -2153,6 +2263,9 @@ void Game::advanceToNextLevel() {
     // Ensure we're in GAME state when starting a transition
     gameState = STATE_GAME;
     
+    // Play level transition sound
+    assets->PlaySound("levelTransition", volumeLevel);
+    
     // Start transition sequence using the transition manager
     transitionManager.startTransition(currentLevel, currentLevel + 1);
     
@@ -2172,6 +2285,12 @@ void Game::initMainMenu() {
     selectedMenuItem = MENU_NEW_GAME; // Default selection
     menuItemSelected = false;
     menuHighlightActive = false; // Start with no highlights
+    
+    // Play main menu music
+    if (assets) {
+        assets->StopMusic();
+        assets->PlayMusic("mainmenu", volumeLevel);
+    }
     
     // Create menu entity objects
     menuTitle = &manager.addEntity();
@@ -2331,14 +2450,39 @@ void Game::loadGame() {
     std::ifstream saveFile("assets/savegame.bin", std::ios::binary);
     if (!saveFile.is_open()) {
         std::cout << "No save file found or could not open. Starting new game." << std::endl;
-        startGame();
+        // Start a new game but don't prompt for player name
+        // Reset key variables
+        gameOver = false;
+        playerWon = false;
+        questionActive = false;
+        collectedClues = 0;
+        currentLevel = 1;
+        gameplayTime = 0;
+        level4MapChanged = false;
+        finalBossDefeated = false;
+        scientistRescued = false;
+        canRescueScientist = false;
+        usedQuestions.clear();
+        
+        // Set default player name if empty
+        if (playerName.empty()) {
+            playerName = "Player";
+        }
+        
+        // Continue with game setup
+        gameState = STATE_GAME;
+        loadLevel(currentLevel);
+        initEntities();
+        gameStartTime = SDL_GetTicks();
         return;
     }
     
     // Make sure assets manager exists before loading
     if (!assets) {
         std::cerr << "Assets manager is null. Cannot load game." << std::endl;
-        startGame();
+        // Handle error but don't prompt for name
+        gameState = STATE_MAIN_MENU;
+        initMainMenu();
         return;
     }
 
@@ -2455,7 +2599,9 @@ void Game::loadGame() {
 
         if (!loadSuccess) {
             std::cerr << "Save file corrupted or incomplete. Starting new game." << std::endl;
-            startGame();
+            // Handle error but don't prompt for player name
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2671,7 +2817,9 @@ void Game::loadGame() {
         }
         catch (const std::exception& e) {
             std::cerr << "Object creation error: " << e.what() << std::endl;
-            startGame();
+            // Go to main menu instead of starting a new game
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2695,11 +2843,15 @@ void Game::loadGame() {
     } 
     catch (const std::exception& e) {
         std::cerr << "Exception during game load: " << e.what() << std::endl;
-        startGame();
+        // Return to main menu without asking for player name
+        gameState = STATE_MAIN_MENU;
+        initMainMenu();
     } 
     catch (...) {
         std::cerr << "Unknown exception during game load. Starting new game." << std::endl;
-        startGame();
+        // Return to main menu without asking for player name
+        gameState = STATE_MAIN_MENU;
+        initMainMenu();
     }
 }
 
@@ -2708,6 +2860,16 @@ void Game::initEndScreen(bool victory) {
     selectedEndOption = END_RESTART; // Default selection
     endOptionSelected = false;
     endHighlightActive = false; // Start with no highlights
+    
+    // Play victory or game over sound
+    if (victory) {
+        assets->PlaySound("victory", volumeLevel);
+    } else {
+        assets->PlaySound("gameOver", volumeLevel);
+    }
+    
+    // Stop any background music
+    assets->StopMusic();
     
     // Create end screen entity objects
     endTitle = &manager.addEntity();
@@ -2838,6 +3000,12 @@ void Game::togglePause() {
         // Store the current gameplay time when pausing
         gameplayTime = SDL_GetTicks() - gameStartTime;
         
+        // Play main menu music when paused
+        if (assets) {
+            assets->StopMusic();
+            assets->PlayMusic("mainmenu", volumeLevel);
+        }
+        
         // Change to pause state
         gameState = STATE_PAUSE;
         initPauseMenu();
@@ -2845,6 +3013,39 @@ void Game::togglePause() {
     else if (gameState == STATE_PAUSE) {
         // Reset the game start time based on the stored gameplay time
         gameStartTime = SDL_GetTicks() - gameplayTime;
+        
+        // Resume appropriate level music
+        if (assets) {
+            assets->StopMusic();
+            
+            // Play music based on current level
+            switch (currentLevel) {
+                case 1:
+                    assets->PlayMusic("level1", volumeLevel);
+                    break;
+                case 2:
+                    assets->PlayMusic("level2", volumeLevel);
+                    break;
+                case 3:
+                case 4:
+                    // Level 3 and 4 share the same music until the boss is encountered
+                    if (currentLevel == 4 && finalBossDefeated) {
+                        // If the boss was already defeated, no specific music needed
+                        assets->PlayMusic("level3-4", volumeLevel);
+                    } else {
+                        assets->PlayMusic("level3-4", volumeLevel);
+                        // Reset boss music flag when returning to level 4 to allow it to trigger again
+                        if (currentLevel == 4) {
+                            bossMusicPlaying = false;
+                        }
+                    }
+                    break;
+                default:
+                    // Default music
+                    assets->PlayMusic("level1", volumeLevel);
+                    break;
+            }
+        }
         
         // Return to game state
         gameState = STATE_GAME;
@@ -3451,8 +3652,10 @@ void Game::renderSettingsMenu() {
 }
 
 void Game::applySettings() {
-    // Here you would typically apply the settings to the game
-    // For this demo, we'll just clean up the settings menu entities
+    // Apply volume settings
+    if (assets) {
+        assets->SetMasterVolume(volumeLevel);
+    }
     
     // Clean up settings menu entities
     if (settingsTitle) settingsTitle->destroy();
@@ -3735,6 +3938,7 @@ void Game::promptPlayerName() {
     playerWon = false;
     collectedClues = 0;
     damageTimer = 1.0f;
+    hurtSoundTimer = 0.0f; // Reset hurt sound timer
     objectCollisionDelay = 1.0f;
     objectCollisionsEnabled = false;
     questionActive = false;
@@ -3743,8 +3947,10 @@ void Game::promptPlayerName() {
     showingExitInstructions = false;
     level4MapChanged = false;
     finalBossDefeated = false;
-    scientistRescued = false;
-    canRescueScientist = false;
+    bossMusicPlaying = false; // Reset boss music state
+    scientistRescued = false; // Reset scientist state
+    canRescueScientist = false; // Reset scientist interaction flag
+    currentLevel = 1;
     
     // Reset used questions when starting a new game
     resetUsedQuestions();
@@ -3847,7 +4053,8 @@ void Game::initLeaderboard() {
         leaderboardEntryLabels[0]->getComponent<UILabel>().SetPosition(msgX, 300);
     } else {
         for (int i = 0; i < leaderboardEntries.size(); i++) {
-            // Format like: "RAN #: PLAYER_NAME TIME"
+            // Format like: "RUN #: PLAYER_NAME TIME" - run numbers should indicate chronological order
+            // Run #1 is now the oldest run, and higher numbers are newer runs
             std::string entryText = "RUN " + std::to_string(i + 1) + ": " + leaderboardEntries[i].first + " " + leaderboardEntries[i].second;
             leaderboardEntryLabels[i] = &manager.addEntity();
             leaderboardEntryLabels[i]->addComponent<UILabel>(0, 250 + i * 80, entryText, "font1", white);
@@ -3946,12 +4153,12 @@ void Game::saveToLeaderboard(const std::string& playerName, Uint32 gameTime) {
         inFile.close();
     }
     
-    // Add new entry at the beginning (most recent)
-    entries.insert(entries.begin(), std::make_pair(playerName, formattedTime));
+    // Add new entry at the end (oldest runs first, newest last)
+    entries.push_back(std::make_pair(playerName, formattedTime));
     
-    // Keep only the 5 most recent entries
+    // If we have more than 5 entries, remove the oldest (first) entry
     if (entries.size() > 5) {
-        entries.resize(5);
+        entries.erase(entries.begin()); // Remove the first (oldest) entry
     }
     
     // Save back to file

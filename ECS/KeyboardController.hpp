@@ -265,6 +265,9 @@ class KeyboardController : public Component {
                         bulletFlip
                     );
                     
+                    // Play shoot sound effect
+                    Game::assets->PlaySound("shoot", Game::volumeLevel);
+                    
                     // Decrease ammo
                     if(ammo != nullptr) {
                         ammo->shoot();

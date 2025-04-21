@@ -147,6 +147,7 @@ class Game {
         static GameState gameState;          // Current game state
         static bool level4MapChanged;        // Tracks if Level 4 map has been changed
         static bool finalBossDefeated;       // Tracks if the final boss has been defeated
+        static bool bossMusicPlaying;        // Tracks if the boss music is already playing
         static bool scientistRescued;        // Tracks if the scientist has been rescued
         static bool canRescueScientist;      // Tracks if player can interact with scientist
         static bool returnToMainMenu;        // Flag to indicate return to main menu
@@ -201,6 +202,10 @@ class Game {
         
         bool isAnswerCorrect = false;         // Was the last answer correct
         const Uint32 feedbackDuration = 800; // How long to show feedback (0.8 seconds)
+        
+        // Sound cooldown variables
+        float hurtSoundTimer = 0.0f;          // Timer for hurt sound cooldown
+        const float hurtSoundCooldown = 0.5f; // Cooldown for hurt sound (0.5 seconds)
         
         // Main menu entities
         Entity* menuTitle = nullptr;

@@ -6,6 +6,7 @@
 #include "Vector2D.hpp"
 #include "ECS/ECS.hpp"
 #include "src/include/SDL2/SDL_ttf.h"
+#include "src/include/SDL2/SDL_mixer.h"
 
 class AssetManager {
     public:
@@ -21,10 +22,29 @@ class AssetManager {
 
         void AddFont(std::string id, std::string path, int fontSize);
         TTF_Font* GetFont(std::string id);
+        
+        // Sound functions
+        void AddSound(std::string id, const char* path);
+        Mix_Chunk* GetSound(std::string id);
+        void PlaySound(std::string id, int volume);
+        
+        // Music functions
+        void AddMusic(std::string id, const char* path);
+        Mix_Music* GetMusic(std::string id);
+        void PlayMusic(std::string id, int volume, int loops = -1);
+        void StopMusic();
+        void PauseMusic();
+        void ResumeMusic();
+        
+        // Set global volume
+        void SetMasterVolume(int volume);
     
     private:
 
         Manager* manager;
         std::map<std::string, SDL_Texture*> textures;
         std::map<std::string, TTF_Font*> fonts;
+        std::map<std::string, Mix_Chunk*> sounds;
+        std::map<std::string, Mix_Music*> music;
+        std::string currentMusic; // Track which music is currently playing
 };

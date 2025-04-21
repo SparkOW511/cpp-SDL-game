@@ -151,6 +151,9 @@ class UILabel : public Component {
             }
             else if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
                 if (IsMouseOver(event.button.x, event.button.y) && onClick) {
+                    // Play click sound
+                    Game::assets->PlaySound("click", Game::volumeLevel);
+                    
                     onClick();
                     return true;
                 }
