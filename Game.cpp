@@ -343,7 +343,7 @@ void Game::initEntities() {
         finalBoss->addComponent<HealthComponent>(500); // Much more health
         finalBoss->addComponent<EnemyAIComponent>(manager);
         finalBoss->getComponent<EnemyAIComponent>().setSpeed(0.5f); // Slower but stronger
-        finalBoss->getComponent<EnemyAIComponent>().setChaseRange(400.0f); // Double chase range for boss
+        finalBoss->getComponent<EnemyAIComponent>().setChaseRange(500.0f); // Double chase range for boss
         finalBoss->addGroup(Game::groupEnemies);
         
         // Create the scientist at position (35,5)
@@ -1638,6 +1638,15 @@ void Game::update()
                         // Check if the enemy is the final boss
                         if (currentLevel == 4 && e == finalBoss) {
                             finalBossDefeated = true;
+                            
+                            // Switch back to level3-4 music after boss is defeated
+                            if (assets) {
+                                assets->StopMusic();
+                                assets->PlayMusic("level3-4", volumeLevel);
+                                currentMusic = "level3-4";
+                                bossMusicPlaying = false;
+                            }
+                            
                             // Show boss defeated message
                             feedbackLabel->getComponent<UILabel>().SetLabelText("BOSS DEFEATED! The path is revealed! Find and rescue the SUPERUM!", "font1", {255, 215, 0, 255});
                             
@@ -1725,11 +1734,12 @@ void Game::update()
                     float distance = sqrt(pow(playerPos.x - bossPos.x, 2) + pow(playerPos.y - bossPos.y, 2));
                     
                     // If close enough to the boss, play boss music
-                    if (distance <= 300 && assets && !bossMusicPlaying) {
+                    if (distance <= 500 && assets && !bossMusicPlaying) {
+                        finalBoss->getComponent<EnemyAIComponent>().setChaseRange(800.0f);
                         assets->StopMusic();
                         assets->PlayMusic("boss", volumeLevel);
                         currentMusic = "boss";
-                        bossMusicPlaying = true;
+                        bossMusicPlaying = true;    
                     }
                 }
                 
