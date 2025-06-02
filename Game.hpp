@@ -112,6 +112,7 @@ class Game {
         void updateLeaderboard();
         void saveToLeaderboard(const std::string& playerName, Uint32 gameTime);
         void promptPlayerName();
+        void setLevelParameters(int level);
 
         static SDL_Renderer *renderer;
         static SDL_Event event;

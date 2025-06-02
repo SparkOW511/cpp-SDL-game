@@ -427,7 +427,6 @@ void Game::init(const char* title, int xpos, int ypos, int width, int height, bo
     assets->AddSound("correctanswer", "./assets/sounds/question/correctanswer.mp3");
     assets->AddSound("wronganswer", "./assets/sounds/question/wronganswer.mp3");
     
-    printf("Loading music files in OGG format for SDL_mixer compatibility\n");
     assets->AddMusic("mainmenu", "./assets/sounds/levels/mainmenu.ogg");
     assets->AddMusic("level1", "./assets/sounds/levels/level1.ogg");
     assets->AddMusic("level2", "./assets/sounds/levels/level2.ogg");
@@ -1882,6 +1881,42 @@ void Game::closeQuestion() {
     feedbackLabel->getComponent<UILabel>().SetLabelText("", "font2");
 }
 
+// Add this helper function before loadLevel
+void Game::setLevelParameters(int level) {
+    if (level == 1) {
+        totalClues = 3;
+        totalMagazines = 3;
+        totalHealthPotions = 2;
+    } else if (level == 2) {
+        totalClues = 5;
+        totalMagazines = 9;  
+        totalHealthPotions = 9;
+    } else if (level == 3) {
+        totalClues = 7;
+        totalMagazines = 15;  
+        totalHealthPotions = 15;
+    } else if (level == 4) {
+        totalClues = 0;
+        totalMagazines = 7;
+        totalHealthPotions = 9;
+    } else {
+        // Default to level 1 parameters if something is wrong
+        std::cerr << "Warning: Unknown level " << level << ". Using level 1 parameters." << std::endl;
+        totalClues = 3;
+        totalMagazines = 3;
+        totalHealthPotions = 2;
+    }
+    
+    // Level 4 specific initializations
+    if (level == 4) {
+        if (!level4MapChanged) {
+            level4MapChanged = false;
+            finalBossDefeated = false;
+            bossMusicPlaying = false;
+        }
+    }
+}
+
 void Game::loadLevel(int levelNum) {
     if (map != nullptr) {
         delete map;
@@ -1921,26 +1956,7 @@ void Game::loadLevel(int levelNum) {
         }
     }
     
-    if (currentLevel == 1) {
-        totalClues = 3;
-        totalMagazines = 3;
-        totalHealthPotions = 2;
-    } else if (currentLevel == 2) {
-        totalClues = 5;
-        totalMagazines = 9;  
-        totalHealthPotions = 9;
-    } else if (currentLevel == 3) {
-        totalClues = 7;
-        totalMagazines = 15;  
-        totalHealthPotions = 15;
-    } else if (currentLevel == 4) {
-        totalClues = 0;
-        totalMagazines = 7;
-        totalHealthPotions = 9;
-        level4MapChanged = false;
-        finalBossDefeated = false;
-        bossMusicPlaying = false;
-    }
+    setLevelParameters(currentLevel);
     
     std::string terrainTexture = "terrainlvl" + std::to_string(levelNum);
     std::string mapPath;
@@ -2330,9 +2346,12 @@ void Game::loadGame() {
         else if (currentLevel == 3) { totalClues = 7; totalMagazines = 15; totalHealthPotions = 15; }
         else if (currentLevel == 4) { totalClues = 0; totalMagazines = 7; totalHealthPotions = 9; }
         else {
+            std::cerr << "Unexpected level: " << currentLevel << ". Setting to level 1." << std::endl;
             currentLevel = 1;
             totalClues = 3; totalMagazines = 3; totalHealthPotions = 2;
         }
+
+        setLevelParameters(currentLevel);
 
         std::string terrainTexture = "terrainlvl" + std::to_string(currentLevel);
         std::string mapPath;
@@ -2344,7 +2363,8 @@ void Game::loadGame() {
 
         if (assets->GetTexture(terrainTexture) == nullptr) {
             std::cerr << "Error: Failed to find texture " << terrainTexture << " for loaded level. Starting new game." << std::endl;
-            startGame();
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2354,7 +2374,8 @@ void Game::loadGame() {
         }
         catch (const std::exception& e) {
             std::cerr << "Map loading error: " << e.what() << std::endl;
-            startGame();
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2403,7 +2424,8 @@ void Game::loadGame() {
         }
         catch (const std::exception& e) {
             std::cerr << "UI initialization error: " << e.what() << std::endl;
-            startGame();
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2419,7 +2441,8 @@ void Game::loadGame() {
         }
         catch (const std::exception& e) {
             std::cerr << "Player creation error: " << e.what() << std::endl;
-            startGame();
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2445,7 +2468,8 @@ void Game::loadGame() {
         }
         catch (const std::exception& e) {
             std::cerr << "Enemy creation error: " << e.what() << std::endl;
-            startGame();
+            gameState = STATE_MAIN_MENU;
+            initMainMenu();
             return;
         }
 
@@ -2877,6 +2901,12 @@ void Game::renderPauseMenu() {
 void Game::saveGame() {
     if (!player || !player->isActive()) {
         std::cout << "Cannot save game: Player does not exist." << std::endl;
+        return;
+    }
+
+    // Validate the current level is within range
+    if (currentLevel < 1 || currentLevel > maxLevels) {
+        std::cerr << "Error: Invalid current level value: " << currentLevel << ". Cannot save game." << std::endl;
         return;
     }
 
