@@ -101,38 +101,6 @@ g++ -I ./src/include -L ./src/lib -o JohnnyEnglish main.cpp Game.cpp TextureMana
 - **Level 4**: Face the final boss and rescue the scientist
 - **Victory Condition**: Defeat the final boss and rescue the scientist
 
-## 📁 Project Structure
-
-```
-├── main.cpp                    # Entry point
-├── Game.cpp/hpp               # Main game class
-├── Makefile                   # Build configuration
-├── ECS/                       # Entity Component System
-│   ├── ECS.hpp               # Core ECS implementation
-│   ├── Components.hpp        # Component includes
-│   ├── SpriteComponent.hpp   # Rendering component
-│   ├── TransformComponent.hpp # Position/rotation component
-│   ├── ColliderComponent.hpp # Collision component
-│   ├── KeyboardController.hpp # Input component
-│   ├── EnemyAIComponent.hpp  # AI behavior component
-│   └── ...                   # Other components
-├── assets/                    # Game assets
-│   ├── sounds/               # Audio files
-│   ├── entities/             # Character sprites
-│   ├── objects/              # Object textures
-│   ├── projectiles/          # Projectile sprites
-│   ├── lvl1-4/              # Level-specific assets
-│   └── MINECRAFT.TTF         # Game font
-├── TextureManager.cpp/hpp     # Texture loading and management
-├── AssetManager.cpp/hpp       # Asset loading system
-├── Map.cpp/hpp               # Level/map system
-├── Vector2D.cpp/hpp          # 2D vector math
-├── Collision.cpp/hpp         # Collision detection
-├── RandomPositionManager.cpp/hpp # Position management
-├── TransitionManager.cpp/hpp  # Scene transitions
-└── *.dll                     # SDL2 runtime libraries
-```
-
 ## 🎨 Assets
 
 The game includes:
