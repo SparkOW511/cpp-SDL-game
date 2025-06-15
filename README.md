@@ -124,34 +124,6 @@ The game includes:
 - Persistent storage in `leaderboard.txt`
 - Accessible from main menu
 
-## 🔧 Development
-
-### Adding New Levels
-1. Create level assets in `assets/lvlX/`
-2. Update `maxLevels` in Game class
-3. Implement level-specific logic in `loadLevel()`
-
-### Adding New Components
-1. Create component header in `ECS/`
-2. Include in `Components.hpp`
-3. Register with entities as needed
-
-### Modifying Game Logic
-- Main game loop: `Game.cpp`
-- Entity management: `ECS/ECS.hpp`
-- Asset loading: `AssetManager.cpp`
-
-## 🐛 Troubleshooting
-
-### Common Issues
-- **Missing DLLs**: Ensure SDL2 DLLs are in the same directory as the executable
-- **Build errors**: Check MinGW installation and SDL2 library paths
-- **Audio issues**: Verify SDL2_mixer is properly installed
-- **Graphics problems**: Ensure SDL2_image supports your image formats
-
-### Debug Build
-Use `make d` for debug build with additional information and immediate execution.
-
 ## 📝 License
 
 This project is for educational purposes. SDL2 libraries are used under their respective licenses.
@@ -163,7 +135,3 @@ This appears to be a personal/educational project. For modifications:
 2. Create feature branches
 3. Test thoroughly
 4. Submit pull requests
-
-## 📞 Support
-
-For issues or questions about the game mechanics or code structure, refer to the source code comments and the ECS architecture documentation within the codebase. 
